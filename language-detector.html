@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Language Detector API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .confidence-bar {
+            height: 8px;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .language-result {
+            transition: all 0.3s ease;
+        }
+
+        .language-result:hover {
+            transform: translateY(-2px);
+        }
+
+        .sample-text {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sample-text:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-search text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Language Detector API</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Language Detection Service</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Language Detector API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Language Detection Interface -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                
+                <!-- Input Section -->
+                <div class="glass-morphism rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-edit text-indigo-300 mr-3"></i>
+                        Text Input
+                    </h3>
+                    
+                    <textarea 
+                        id="input-text" 
+                        class="w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-vertical"
+                        placeholder="Enter text to detect language..."
+                        rows="8"
+                    ></textarea>
+
+                    <div class="flex items-center justify-between mt-4">
+                        <div class="text-xs text-gray-400">
+                            <span id="char-count">0</span> characters
+                        </div>
+                        <div class="flex space-x-2">
+                            <button id="clear-btn" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
+                                <i class="fas fa-trash mr-1"></i> Clear
+                            </button>
+                            <button id="paste-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors">
+                                <i class="fas fa-paste mr-1"></i> Paste
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-center mt-6">
+                        <button id="detect-btn" class="bg-gradient-to-r from-indigo-500 to-blue-500 text-white px-8 py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                            <i class="fas fa-search mr-2"></i>
+                            <span id="detect-btn-text">Detect Language</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="glass-morphism rounded-2xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-chart-bar text-blue-300 mr-3"></i>
+                        Detection Results
+                    </h3>
+
+                    <div id="results-container" class="space-y-3">
+                        <div id="results-placeholder" class="text-center py-8 text-gray-500">
+                            <i class="fas fa-search text-4xl mb-4 opacity-50"></i>
+                            <p>Detection results will appear here...</p>
+                        </div>
+
+                        <div id="loading-indicator" class="hidden text-center py-8">
+                            <div class="flex items-center justify-center space-x-2">
+                                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-300"></div>
+                                <span class="text-indigo-300">Detecting language...</span>
+                            </div>
+                        </div>
+
+                        <div id="results-list" class="space-y-3">
+                            <!-- Results will be populated here -->
+                        </div>
+                    </div>
+
+                    <div id="detection-info" class="mt-4 text-xs text-gray-400 hidden">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        <span id="detection-time"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sample Texts Section -->
+            <div class="glass-morphism rounded-2xl p-6 mb-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                    <i class="fas fa-samples text-purple-300 mr-3"></i>
+                    Sample Texts
+                </h3>
+                <p class="text-gray-200 text-sm mb-4">Click on any sample text to test the language detection:</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer" 
+                         data-text="Hello, how are you today? I hope you're having a wonderful day!"
+                         data-expected="English">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">English</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"Hello, how are you today? I hope you're having a wonderful day!"</p>
+                    </div>
+
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer"
+                         data-text="Bonjour, comment allez-vous aujourd'hui ? J'espère que vous passez une merveilleuse journée !"
+                         data-expected="French">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">French</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"Bonjour, comment allez-vous aujourd'hui ?"</p>
+                    </div>
+
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer"
+                         data-text="Hola, ¿cómo estás hoy? ¡Espero que tengas un día maravilloso!"
+                         data-expected="Spanish">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">Spanish</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"Hola, ¿cómo estás hoy? ¡Espero que tengas un día maravilloso!"</p>
+                    </div>
+
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer"
+                         data-text="Guten Tag, wie geht es Ihnen heute? Ich hoffe, Sie haben einen wundervollen Tag!"
+                         data-expected="German">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">German</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"Guten Tag, wie geht es Ihnen heute?"</p>
+                    </div>
+
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer"
+                         data-text="こんにちは、今日はいかがお過ごしですか？素晴らしい一日をお過ごしください！"
+                         data-expected="Japanese">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">Japanese</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"こんにちは、今日はいかがお過ごしですか？"</p>
+                    </div>
+
+                    <div class="sample-text glass-morphism rounded-lg p-4 cursor-pointer"
+                         data-text="Привет, как дела сегодня? Надеюсь, у тебя замечательный день!"
+                         data-expected="Russian">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-blue-300">Russian</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200">"Привет, как дела сегодня?"</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features and Tips -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Features -->
+                <div class="glass-morphism rounded-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-star text-yellow-300 mr-3"></i>
+                        Features
+                    </h3>
+                    <ul class="space-y-3 text-gray-200">
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Instant language detection
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Confidence scoring for results
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Multiple candidate languages
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Privacy-first (local processing)
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Support for 100+ languages
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Tips -->
+                <div class="glass-morphism rounded-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-lightbulb text-blue-300 mr-3"></i>
+                        Usage Tips
+                    </h3>
+                    <ul class="space-y-3 text-gray-200 text-sm">
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-indigo-300 mr-2 mt-1"></i>
+                            <span>Longer texts generally provide more accurate detection</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-indigo-300 mr-2 mt-1"></i>
+                            <span>Very short phrases may have lower confidence scores</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-indigo-300 mr-2 mt-1"></i>
+                            <span>Mixed-language text may show multiple candidates</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-indigo-300 mr-2 mt-1"></i>
+                            <span>All processing happens locally in your browser</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class LanguageDetectorApp {
+            constructor() {
+                this.detector = null;
+                this.isDetecting = false;
+                
+                // Language code to name mapping
+                this.languageNames = {
+                    'en': 'English',
+                    'es': 'Spanish', 
+                    'fr': 'French',
+                    'de': 'German',
+                    'it': 'Italian',
+                    'pt': 'Portuguese',
+                    'ru': 'Russian',
+                    'ja': 'Japanese',
+                    'ko': 'Korean',
+                    'zh': 'Chinese',
+                    'ar': 'Arabic',
+                    'hi': 'Hindi',
+                    'tr': 'Turkish',
+                    'pl': 'Polish',
+                    'nl': 'Dutch',
+                    'sv': 'Swedish',
+                    'da': 'Danish',
+                    'no': 'Norwegian',
+                    'fi': 'Finnish',
+                    'he': 'Hebrew',
+                    'th': 'Thai',
+                    'vi': 'Vietnamese',
+                    'cs': 'Czech',
+                    'hu': 'Hungarian',
+                    'ro': 'Romanian',
+                    'bg': 'Bulgarian',
+                    'hr': 'Croatian',
+                    'sk': 'Slovak',
+                    'sl': 'Slovenian',
+                    'et': 'Estonian',
+                    'lv': 'Latvian',
+                    'lt': 'Lithuanian',
+                    'mt': 'Maltese',
+                    'ga': 'Irish',
+                    'cy': 'Welsh',
+                    'eu': 'Basque',
+                    'ca': 'Catalan',
+                    'gl': 'Galician',
+                    'is': 'Icelandic',
+                    'mk': 'Macedonian',
+                    'sq': 'Albanian',
+                    'sr': 'Serbian',
+                    'bs': 'Bosnian',
+                    'me': 'Montenegrin',
+                    'be': 'Belarusian',
+                    'uk': 'Ukrainian'
+                };
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.updateUI();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    if (!('LanguageDetector' in self)) {
+                        throw new Error('LanguageDetector API not supported');
+                    }
+                    
+                    const availability = await LanguageDetector.availability();
+                    
+                    if (availability === 'unavailable') {
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Language Detector API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    // Create the detector
+                    this.detector = await LanguageDetector.create({
+                        monitor(m) {
+                            m.addEventListener('downloadprogress', (e) => {
+                                console.log(`Downloaded ${e.loaded * 100}%`);
+                            });
+                        }
+                    });
+                    
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                } catch (error) {
+                    console.error('Language Detector API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Language Detector API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            setupEventListeners() {
+                const inputText = document.getElementById('input-text');
+                const detectBtn = document.getElementById('detect-btn');
+                const clearBtn = document.getElementById('clear-btn');
+                const pasteBtn = document.getElementById('paste-btn');
+                
+                // Text input events
+                inputText.addEventListener('input', () => {
+                    this.updateCharCount();
+                    this.updateDetectButton();
+                });
+                
+                inputText.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        this.detectLanguage();
+                    }
+                });
+                
+                // Button events
+                detectBtn.addEventListener('click', () => this.detectLanguage());
+                clearBtn.addEventListener('click', () => this.clearText());
+                pasteBtn.addEventListener('click', () => this.pasteText());
+                
+                // Sample text events
+                document.querySelectorAll('.sample-text').forEach(sample => {
+                    sample.addEventListener('click', () => {
+                        const text = sample.getAttribute('data-text');
+                        inputText.value = text;
+                        this.updateCharCount();
+                        this.updateDetectButton();
+                        this.detectLanguage();
+                    });
+                });
+            }
+            
+            updateCharCount() {
+                const inputText = document.getElementById('input-text');
+                const charCount = document.getElementById('char-count');
+                charCount.textContent = inputText.value.length;
+            }
+            
+            updateDetectButton() {
+                const inputText = document.getElementById('input-text');
+                const detectBtn = document.getElementById('detect-btn');
+                
+                const hasText = inputText.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                
+                detectBtn.disabled = !(hasText && apiAvailable && !this.isDetecting);
+            }
+            
+            async detectLanguage() {
+                if (this.isDetecting || !this.detector) return;
+                
+                const inputText = document.getElementById('input-text').value.trim();
+                if (!inputText) return;
+                
+                this.isDetecting = true;
+                this.updateUI();
+                
+                const startTime = performance.now();
+                
+                try {
+                    const results = await this.detector.detect(inputText);
+                    const endTime = performance.now();
+                    const detectionTime = Math.round(endTime - startTime);
+                    
+                    this.displayResults(results, detectionTime);
+                    
+                } catch (error) {
+                    console.error('Language detection failed:', error);
+                    this.showError('Language detection failed: ' + error.message);
+                } finally {
+                    this.isDetecting = false;
+                    this.updateUI();
+                }
+            }
+            
+            displayResults(results, detectionTime) {
+                const placeholder = document.getElementById('results-placeholder');
+                const resultsList = document.getElementById('results-list');
+                const detectionInfo = document.getElementById('detection-info');
+                const detectionTimeSpan = document.getElementById('detection-time');
+                
+                // Hide placeholder and show results
+                placeholder.style.display = 'none';
+                resultsList.innerHTML = '';
+                
+                // Display top results (limit to top 5)
+                const topResults = results.slice(0, 5);
+                
+                topResults.forEach((result, index) => {
+                    const languageName = this.languageNames[result.detectedLanguage] || result.detectedLanguage.toUpperCase();
+                    const confidence = (result.confidence * 100).toFixed(1);
+                    const isTopResult = index === 0;
+                    
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = `language-result glass-morphism rounded-lg p-4 ${isTopResult ? 'border-2 border-green-400' : ''}`;
+                    
+                    resultDiv.innerHTML = `
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center">
+                                ${isTopResult ? '<i class="fas fa-crown text-yellow-300 mr-2"></i>' : ''}
+                                <span class="font-semibold text-white">${languageName}</span>
+                                <span class="text-xs text-gray-400 ml-2">(${result.detectedLanguage})</span>
+                            </div>
+                            <span class="text-sm font-mono ${isTopResult ? 'text-green-300' : 'text-blue-300'}">${confidence}%</span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-2 mb-2">
+                            <div class="confidence-bar bg-gradient-to-r ${isTopResult ? 'from-green-400 to-green-500' : 'from-blue-400 to-blue-500'} rounded-full" 
+                                 style="width: ${confidence}%"></div>
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            ${isTopResult ? 'Most likely language' : `Rank: #${index + 1}`}
+                        </div>
+                    `;
+                    
+                    resultsList.appendChild(resultDiv);
+                });
+                
+                // Show detection info
+                detectionInfo.classList.remove('hidden');
+                detectionTimeSpan.textContent = `Detection completed in ${detectionTime}ms`;
+                
+                // If we have a clear winner (>80% confidence), highlight it
+                if (topResults.length > 0 && topResults[0].confidence > 0.8) {
+                    this.showNotification(`Detected: ${this.languageNames[topResults[0].detectedLanguage] || topResults[0].detectedLanguage}`, 'success');
+                }
+            }
+            
+            clearText() {
+                document.getElementById('input-text').value = '';
+                document.getElementById('results-list').innerHTML = '';
+                document.getElementById('results-placeholder').style.display = 'block';
+                document.getElementById('detection-info').classList.add('hidden');
+                this.updateCharCount();
+                this.updateDetectButton();
+            }
+            
+            async pasteText() {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const inputText = document.getElementById('input-text');
+                    inputText.value = text;
+                    this.updateCharCount();
+                    this.updateDetectButton();
+                } catch (error) {
+                    console.error('Failed to paste text:', error);
+                    this.showNotification('Failed to paste text', 'error');
+                }
+            }
+            
+            updateUI() {
+                const detectBtn = document.getElementById('detect-btn');
+                const detectBtnText = document.getElementById('detect-btn-text');
+                const loading = document.getElementById('loading-indicator');
+                const placeholder = document.getElementById('results-placeholder');
+                
+                if (this.isDetecting) {
+                    detectBtnText.textContent = 'Detecting...';
+                    loading.classList.remove('hidden');
+                    placeholder.style.display = 'none';
+                } else {
+                    detectBtnText.textContent = 'Detect Language';
+                    loading.classList.add('hidden');
+                }
+                
+                this.updateDetectButton();
+            }
+            
+            showError(message) {
+                const resultsList = document.getElementById('results-list');
+                const loading = document.getElementById('loading-indicator');
+                
+                loading.classList.add('hidden');
+                resultsList.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-red-300">
+                            <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                            <p>${message}</p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        document.body.removeChild(notification);
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new LanguageDetectorApp();
+        });
+    </script>
+</body>
+</html>

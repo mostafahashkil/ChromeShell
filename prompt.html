@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .chat-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .user-message {
+            text-align: right;
+        }
+
+        .user-message .message-bubble {
+            background: linear-gradient(to right, #3b82f6, #1d4ed8);
+            margin-left: auto;
+            max-width: 80%;
+            border-radius: 18px 18px 4px 18px;
+        }
+
+        .assistant-message .message-bubble {
+            background: linear-gradient(to right, #10b981, #059669);
+            max-width: 80%;
+            border-radius: 18px 18px 18px 4px;
+        }
+
+        .message-bubble {
+            padding: 12px 16px;
+            color: white;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(16, 185, 129, 0.8);
+            border-radius: 18px 18px 18px 4px;
+            max-width: 80px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: white;
+            margin: 0 2px;
+            animation: typingAnimation 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typingAnimation {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .prompt-suggestion {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .prompt-suggestion:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .settings-panel {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #374151;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #10b981;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-comments text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Prompt API (Gemini Nano)</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Conversational Assistant</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button id="settings-btn" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button id="clear-chat-btn" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-4">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Prompt API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Panel -->
+            <div id="settings-panel" class="hidden mb-6 glass-morphism rounded-2xl p-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                    <i class="fas fa-sliders-h text-green-300 mr-3"></i>
+                    Model Settings
+                </h3>
+                
+                <div class="settings-panel space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">
+                            Temperature: <span id="temperature-value" class="text-green-300">1.0</span>
+                        </label>
+                        <input type="range" id="temperature-slider" class="slider" min="0" max="2" step="0.1" value="1.0">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>Focused (0.0)</span>
+                            <span>Creative (2.0)</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">
+                            Top-K: <span id="topk-value" class="text-green-300">3</span>
+                        </label>
+                        <input type="range" id="topk-slider" class="slider" min="1" max="40" step="1" value="3">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>Conservative (1)</span>
+                            <span>Diverse (40)</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">System Prompt</label>
+                        <textarea id="system-prompt" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-vertical" 
+                                  rows="3" 
+                                  placeholder="You are a helpful and friendly assistant...">You are a helpful and friendly assistant.</textarea>
+                    </div>
+
+                    <div class="flex space-x-4">
+                        <button id="save-settings-btn" class="bg-gradient-to-r from-green-500 to-teal-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
+                            <i class="fas fa-save mr-2"></i>Apply Settings
+                        </button>
+                        <button id="reset-settings-btn" class="glass-morphism text-white px-4 py-2 rounded-lg hover:bg-white hover:bg-opacity-20 transition-all">
+                            <i class="fas fa-undo mr-2"></i>Reset Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <!-- Chat Interface -->
+                <div class="lg:col-span-3">
+                    <div class="glass-morphism rounded-2xl p-6 mb-4">
+                        <div id="chat-container" class="chat-container mb-4">
+                            <div id="welcome-message" class="text-center py-8 text-gray-400">
+                                <i class="fas fa-robot text-4xl mb-4"></i>
+                                <h3 class="text-xl font-semibold mb-2">Welcome to Gemini Nano Chat</h3>
+                                <p>Start a conversation with Chrome's built-in AI assistant. Try asking a question or use one of the suggestions below.</p>
+                            </div>
+                            <div id="messages"></div>
+                        </div>
+
+                        <!-- Input Area -->
+                        <div class="flex space-x-3">
+                            <div class="flex-1">
+                                <textarea 
+                                    id="prompt-input" 
+                                    class="w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-none"
+                                    placeholder="Type your message here... (Ctrl+Enter to send)"
+                                    rows="2"
+                                ></textarea>
+                            </div>
+                            <div class="flex flex-col space-y-2">
+                                <button id="send-btn" class="bg-gradient-to-r from-green-500 to-teal-500 text-white p-4 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                                <button id="stop-btn" class="hidden bg-red-500 text-white p-4 rounded-lg hover:shadow-lg transition-all">
+                                    <i class="fas fa-stop"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-3 text-xs text-gray-400">
+                            <div>
+                                <span id="char-count">0</span>/8000 characters
+                            </div>
+                            <div id="session-info" class="hidden">
+                                Session: <span id="session-usage">0</span>/<span id="session-quota">0</span> tokens
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suggestions Sidebar -->
+                <div class="lg:col-span-1">
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-lightbulb text-yellow-300 mr-2"></i>
+                            Quick Prompts
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="Explain quantum computing in simple terms">
+                                <div class="text-sm font-medium text-white mb-1">Explain Concepts</div>
+                                <div class="text-xs text-gray-300">Explain quantum computing in simple terms</div>
+                            </div>
+
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="Write a creative story about a robot that learns to paint">
+                                <div class="text-sm font-medium text-white mb-1">Creative Writing</div>
+                                <div class="text-xs text-gray-300">Write a creative story about a robot</div>
+                            </div>
+
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="Help me brainstorm ideas for a sustainable energy project">
+                                <div class="text-sm font-medium text-white mb-1">Brainstorming</div>
+                                <div class="text-xs text-gray-300">Ideas for sustainable energy project</div>
+                            </div>
+
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="Analyze the pros and cons of remote work">
+                                <div class="text-sm font-medium text-white mb-1">Analysis</div>
+                                <div class="text-xs text-gray-300">Pros and cons of remote work</div>
+                            </div>
+
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="What are some tips for learning a new programming language?">
+                                <div class="text-sm font-medium text-white mb-1">Learning Tips</div>
+                                <div class="text-xs text-gray-300">Tips for learning programming</div>
+                            </div>
+
+                            <div class="prompt-suggestion glass-morphism rounded-lg p-3 cursor-pointer"
+                                 data-prompt="Help me write a professional email to my manager about a project update">
+                                <div class="text-sm font-medium text-white mb-1">Email Writing</div>
+                                <div class="text-xs text-gray-300">Professional project update email</div>
+                            </div>
+                        </div>
+
+                        <!-- Usage Tips -->
+                        <div class="mt-6 pt-4 border-t border-gray-600">
+                            <h4 class="text-sm font-semibold text-white mb-3">💡 Tips</h4>
+                            <ul class="space-y-2 text-xs text-gray-300">
+                                <li>• Be specific in your questions</li>
+                                <li>• Use follow-up questions</li>
+                                <li>• Try different conversation styles</li>
+                                <li>• All processing is local and private</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class PromptAPIApp {
+            constructor() {
+                this.session = null;
+                this.isGenerating = false;
+                this.currentController = null;
+                this.conversationHistory = [];
+                
+                // Default settings
+                this.settings = {
+                    temperature: 1.0,
+                    topK: 3,
+                    systemPrompt: 'You are a helpful and friendly assistant.'
+                };
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.loadSettings();
+                this.updateUI();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    if (!('LanguageModel' in self)) {
+                        throw new Error('LanguageModel API not supported');
+                    }
+                    
+                    const availability = await LanguageModel.availability();
+                    
+                    if (availability === 'unavailable') {
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Prompt API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    // Get model parameters
+                    const params = await LanguageModel.params();
+                    console.log('Model parameters:', params);
+                    
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                    await this.createSession();
+                    
+                } catch (error) {
+                    console.error('Prompt API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Prompt API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            async createSession() {
+                try {
+                    if (this.session) {
+                        this.session.destroy();
+                    }
+                    
+                    this.session = await LanguageModel.create({
+                        temperature: this.settings.temperature,
+                        topK: this.settings.topK,
+                        initialPrompts: [
+                            {
+                                role: 'system',
+                                content: this.settings.systemPrompt
+                            }
+                        ],
+                        monitor(m) {
+                            m.addEventListener('downloadprogress', (e) => {
+                                console.log(`Downloaded ${e.loaded * 100}%`);
+                            });
+                        }
+                    });
+                    
+                    this.updateSessionInfo();
+                    
+                } catch (error) {
+                    console.error('Failed to create session:', error);
+                    this.showNotification('Failed to create AI session: ' + error.message, 'error');
+                }
+            }
+            
+            setupEventListeners() {
+                const promptInput = document.getElementById('prompt-input');
+                const sendBtn = document.getElementById('send-btn');
+                const stopBtn = document.getElementById('stop-btn');
+                const clearChatBtn = document.getElementById('clear-chat-btn');
+                const settingsBtn = document.getElementById('settings-btn');
+                const settingsPanel = document.getElementById('settings-panel');
+                const saveSettingsBtn = document.getElementById('save-settings-btn');
+                const resetSettingsBtn = document.getElementById('reset-settings-btn');
+                
+                // Input events
+                promptInput.addEventListener('input', () => {
+                    this.updateCharCount();
+                    this.updateSendButton();
+                });
+                
+                promptInput.addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        e.preventDefault();
+                        this.sendPrompt();
+                    }
+                });
+                
+                // Button events
+                sendBtn.addEventListener('click', () => this.sendPrompt());
+                stopBtn.addEventListener('click', () => this.stopGeneration());
+                clearChatBtn.addEventListener('click', () => this.clearChat());
+                settingsBtn.addEventListener('click', () => {
+                    settingsPanel.classList.toggle('hidden');
+                });
+                
+                // Settings events
+                saveSettingsBtn.addEventListener('click', () => this.saveSettings());
+                resetSettingsBtn.addEventListener('click', () => this.resetSettings());
+                
+                // Settings sliders
+                const temperatureSlider = document.getElementById('temperature-slider');
+                const topkSlider = document.getElementById('topk-slider');
+                
+                temperatureSlider.addEventListener('input', (e) => {
+                    document.getElementById('temperature-value').textContent = e.target.value;
+                });
+                
+                topkSlider.addEventListener('input', (e) => {
+                    document.getElementById('topk-value').textContent = e.target.value;
+                });
+                
+                // Prompt suggestions
+                document.querySelectorAll('.prompt-suggestion').forEach(suggestion => {
+                    suggestion.addEventListener('click', () => {
+                        const prompt = suggestion.getAttribute('data-prompt');
+                        promptInput.value = prompt;
+                        this.updateCharCount();
+                        this.updateSendButton();
+                        this.sendPrompt();
+                    });
+                });
+            }
+            
+            updateCharCount() {
+                const promptInput = document.getElementById('prompt-input');
+                const charCount = document.getElementById('char-count');
+                charCount.textContent = promptInput.value.length;
+            }
+            
+            updateSendButton() {
+                const promptInput = document.getElementById('prompt-input');
+                const sendBtn = document.getElementById('send-btn');
+                
+                const hasText = promptInput.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                const sessionReady = this.session !== null;
+                
+                sendBtn.disabled = !(hasText && apiAvailable && sessionReady && !this.isGenerating);
+            }
+            
+            updateSessionInfo() {
+                if (this.session) {
+                    const sessionInfo = document.getElementById('session-info');
+                    const sessionUsage = document.getElementById('session-usage');
+                    const sessionQuota = document.getElementById('session-quota');
+                    
+                    sessionUsage.textContent = this.session.inputUsage || 0;
+                    sessionQuota.textContent = this.session.inputQuota || 'Unknown';
+                    sessionInfo.classList.remove('hidden');
+                }
+            }
+            
+            async sendPrompt() {
+                if (this.isGenerating || !this.session) return;
+                
+                const promptInput = document.getElementById('prompt-input');
+                const prompt = promptInput.value.trim();
+                if (!prompt) return;
+                
+                this.isGenerating = true;
+                this.currentController = new AbortController();
+                
+                // Hide welcome message
+                const welcomeMessage = document.getElementById('welcome-message');
+                if (welcomeMessage) {
+                    welcomeMessage.style.display = 'none';
+                }
+                
+                // Add user message
+                this.addMessage(prompt, 'user');
+                promptInput.value = '';
+                this.updateCharCount();
+                this.updateUI();
+                
+                // Show typing indicator
+                const typingDiv = this.addTypingIndicator();
+                
+                try {
+                    // Use streaming for better UX
+                    const stream = this.session.promptStreaming(prompt, {
+                        signal: this.currentController.signal
+                    });
+                    
+                    // Remove typing indicator
+                    typingDiv.remove();
+                    
+                    // Create assistant message container
+                    const messageDiv = this.createMessageElement('', 'assistant');
+                    const messageBubble = messageDiv.querySelector('.message-bubble');
+                    
+                    let fullResponse = '';
+                    
+                    for await (const chunk of stream) {
+                        // Append each chunk to build the full response incrementally
+                        fullResponse += chunk;
+                        messageBubble.textContent = fullResponse;
+                        this.scrollToBottom();
+                    }
+                    
+                    // Store in conversation history
+                    this.conversationHistory.push(
+                        { role: 'user', content: prompt },
+                        { role: 'assistant', content: fullResponse }
+                    );
+                    
+                    this.updateSessionInfo();
+                    
+                } catch (error) {
+                    // Remove typing indicator if it exists
+                    if (typingDiv && typingDiv.parentNode) {
+                        typingDiv.remove();
+                    }
+                    
+                    if (error.name !== 'AbortError') {
+                        console.error('Prompt failed:', error);
+                        this.addMessage('Sorry, I encountered an error: ' + error.message, 'assistant', true);
+                    }
+                } finally {
+                    this.isGenerating = false;
+                    this.currentController = null;
+                    this.updateUI();
+                }
+            }
+            
+            stopGeneration() {
+                if (this.currentController) {
+                    this.currentController.abort();
+                }
+            }
+            
+            addMessage(content, role, isError = false) {
+                const messageDiv = this.createMessageElement(content, role, isError);
+                return messageDiv;
+            }
+            
+            createMessageElement(content, role, isError = false) {
+                const messagesContainer = document.getElementById('messages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}-message`;
+                
+                let bubbleClass = 'message-bubble';
+                if (isError) {
+                    bubbleClass += ' bg-red-500';
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="${bubbleClass}">
+                        ${isError ? '<i class="fas fa-exclamation-triangle mr-2"></i>' : ''}${content}
+                    </div>
+                `;
+                
+                messagesContainer.appendChild(messageDiv);
+                this.scrollToBottom();
+                return messageDiv;
+            }
+            
+            addTypingIndicator() {
+                const messagesContainer = document.getElementById('messages');
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'message assistant-message';
+                typingDiv.innerHTML = `
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                `;
+                messagesContainer.appendChild(typingDiv);
+                this.scrollToBottom();
+                return typingDiv;
+            }
+            
+            scrollToBottom() {
+                const chatContainer = document.getElementById('chat-container');
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            
+            clearChat() {
+                const messagesContainer = document.getElementById('messages');
+                const welcomeMessage = document.getElementById('welcome-message');
+                const sessionInfo = document.getElementById('session-info');
+                
+                messagesContainer.innerHTML = '';
+                welcomeMessage.style.display = 'block';
+                sessionInfo.classList.add('hidden');
+                
+                this.conversationHistory = [];
+                
+                // Create new session to reset context
+                this.createSession();
+            }
+            
+            loadSettings() {
+                const saved = localStorage.getItem('prompt-api-settings');
+                if (saved) {
+                    this.settings = { ...this.settings, ...JSON.parse(saved) };
+                }
+                this.applySettingsToUI();
+            }
+            
+            saveSettings() {
+                const temperature = parseFloat(document.getElementById('temperature-slider').value);
+                const topK = parseInt(document.getElementById('topk-slider').value);
+                const systemPrompt = document.getElementById('system-prompt').value;
+                
+                this.settings = { temperature, topK, systemPrompt };
+                localStorage.setItem('prompt-api-settings', JSON.stringify(this.settings));
+                
+                // Create new session with updated settings
+                this.createSession();
+                this.showNotification('Settings saved and applied', 'success');
+                document.getElementById('settings-panel').classList.add('hidden');
+            }
+            
+            resetSettings() {
+                this.settings = {
+                    temperature: 1.0,
+                    topK: 3,
+                    systemPrompt: 'You are a helpful and friendly assistant.'
+                };
+                
+                this.applySettingsToUI();
+                localStorage.removeItem('prompt-api-settings');
+                this.showNotification('Settings reset to defaults', 'info');
+            }
+            
+            applySettingsToUI() {
+                document.getElementById('temperature-slider').value = this.settings.temperature;
+                document.getElementById('temperature-value').textContent = this.settings.temperature;
+                document.getElementById('topk-slider').value = this.settings.topK;
+                document.getElementById('topk-value').textContent = this.settings.topK;
+                document.getElementById('system-prompt').value = this.settings.systemPrompt;
+            }
+            
+            updateUI() {
+                const sendBtn = document.getElementById('send-btn');
+                const stopBtn = document.getElementById('stop-btn');
+                
+                if (this.isGenerating) {
+                    sendBtn.classList.add('hidden');
+                    stopBtn.classList.remove('hidden');
+                } else {
+                    sendBtn.classList.remove('hidden');
+                    stopBtn.classList.add('hidden');
+                }
+                
+                this.updateSendButton();
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new PromptAPIApp();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome AI API Availability Check - Step by Step</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        .step {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .code-block {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .result {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #2196F3;
+        }
+        button {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .status-good { color: #4CAF50; font-weight: bold; }
+        .status-bad { color: #f44336; font-weight: bold; }
+        .status-warn { color: #ff9800; font-weight: bold; }
+        h1, h2 { text-align: center; margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Chrome AI API Availability Check</h1>
+        <p style="text-align: center; font-size: 18px; margin-bottom: 40px;">
+            Learn exactly how to check if Chrome Built-in AI APIs are available in your browser
+        </p>
+
+        <div class="step">
+            <h2>Step 1: Check if API Exists in Browser</h2>
+            <p>First, we check if the API constructor is available in the global scope:</p>
+            <div class="code-block">// Check if API exists
+if ('LanguageModel' in self) {
+    console.log('✅ LanguageModel API found');
+} else {
+    console.log('❌ LanguageModel API not found');
+}</div>
+            <button onclick="checkAPIExists()">Test API Existence</button>
+            <div id="existence-result" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h2>Step 2: Check API Availability</h2>
+            <p>If the API exists, check its availability status:</p>
+            <div class="code-block">// Check availability
+const availability = await LanguageModel.availability();
+
+// Possible return values:
+// 'readily' - Ready to use immediately
+// 'after-download' - Available after downloading model
+// 'no' - Not available</div>
+            <button onclick="checkAvailability()">Test Availability</button>
+            <div id="availability-result" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h2>Step 3: Handle Different Availability States</h2>
+            <p>Based on the availability response, determine if API is usable:</p>
+            <div class="code-block">function getAPIStatus(availability) {
+    switch(availability) {
+        case 'readily':
+            return 'READY - Can use immediately';
+        case 'after-download':
+            return 'READY - Will download model on first use';
+        case 'no':
+            return 'UNAVAILABLE - API not supported';
+        default:
+            return 'UNKNOWN - Unexpected response';
+    }
+}</div>
+            <button onclick="checkAllAPIs()">Check All APIs</button>
+            <div id="all-apis-result" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h2>Step 4: Complete Implementation</h2>
+            <p>Here's the complete function used in the Chrome AI Shell:</p>
+            <div class="code-block">async function checkAPIStatus() {
+    const apis = ['LanguageModel', 'Translator', 'Summarizer', 'Writer', 'Rewriter', 'Proofreader'];
+    
+    for (const apiName of apis) {
+        try {
+            if (apiName in self) {
+                let availability;
+                
+                if (apiName === 'Translator') {
+                    // Translator needs language parameters
+                    availability = await self[apiName].availability({
+                        sourceLanguage: 'en', 
+                        targetLanguage: 'es'
+                    });
+                } else {
+                    // Other APIs don't need parameters
+                    availability = await self[apiName].availability();
+                }
+                
+                console.log(`${apiName}: ${availability}`);
+            } else {
+                console.log(`${apiName}: Not found in browser`);
+            }
+        } catch (error) {
+            console.log(`${apiName}: Error - ${error.message}`);
+        }
+    }
+}</div>
+            <button onclick="runCompleteCheck()">Run Complete Check</button>
+            <div id="complete-result" class="result" style="display: none;"></div>
+        </div>
+
+        <div class="step">
+            <h2>📋 What You Should See</h2>
+            <div style="background: rgba(0, 0, 0, 0.2); padding: 15px; border-radius: 8px;">
+                <p><strong>In Chrome Canary with APIs enabled:</strong></p>
+                <div class="code-block">LanguageModel: readily
+Translator: after-download
+Summarizer: readily
+Writer: after-download
+Rewriter: readily
+Proofreader: readily</div>
+                
+                <p><strong>In regular Chrome or without flags:</strong></p>
+                <div class="code-block">LanguageModel: Not found in browser
+Translator: Not found in browser
+Summarizer: Not found in browser
+Writer: Not found in browser
+Rewriter: Not found in browser
+Proofreader: Not found in browser</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showResult(elementId, content, isSuccess = true) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = content;
+            element.style.display = 'block';
+            element.style.borderLeftColor = isSuccess ? '#4CAF50' : '#f44336';
+        }
+
+        async function checkAPIExists() {
+            const apis = ['LanguageModel', 'Translator', 'Summarizer', 'Writer', 'Rewriter', 'Proofreader'];
+            let result = '<h3>API Existence Check:</h3>';
+            
+            apis.forEach(api => {
+                const exists = api in self;
+                result += `<div>${api}: <span class="${exists ? 'status-good' : 'status-bad'}">${exists ? '✅ Found' : '❌ Not Found'}</span></div>`;
+            });
+            
+            showResult('existence-result', result);
+        }
+
+        async function checkAvailability() {
+            let result = '<h3>Availability Check (LanguageModel):</h3>';
+            
+            try {
+                if ('LanguageModel' in self) {
+                    const availability = await LanguageModel.availability();
+                    result += `<div>Status: <span class="status-good">${availability}</span></div>`;
+                    result += `<div>Meaning: ${getStatusMeaning(availability)}</div>`;
+                } else {
+                    result += '<div><span class="status-bad">❌ LanguageModel API not found</span></div>';
+                }
+            } catch (error) {
+                result += `<div><span class="status-bad">❌ Error: ${error.message}</span></div>`;
+            }
+            
+            showResult('availability-result', result);
+        }
+
+        function getStatusMeaning(availability) {
+            switch(availability) {
+                case 'readily': return '🟢 Ready to use immediately';
+                case 'after-download': return '🟡 Ready after downloading model';
+                case 'no': return '🔴 Not available';
+                default: return '⚪ Unknown status';
+            }
+        }
+
+        async function checkAllAPIs() {
+            const apis = [
+                { name: 'LanguageModel', params: null },
+                { name: 'Translator', params: { sourceLanguage: 'en', targetLanguage: 'es' } },
+                { name: 'Summarizer', params: null },
+                { name: 'Writer', params: null },
+                { name: 'Rewriter', params: null },
+                { name: 'Proofreader', params: null }
+            ];
+            
+            let result = '<h3>All APIs Check:</h3>';
+            
+            for (const api of apis) {
+                try {
+                    if (api.name in self) {
+                        const availability = api.params 
+                            ? await self[api.name].availability(api.params)
+                            : await self[api.name].availability();
+                        
+                        const statusClass = (availability === 'readily' || availability === 'after-download') 
+                            ? 'status-good' : 'status-bad';
+                        
+                        result += `<div>${api.name}: <span class="${statusClass}">${availability}</span> - ${getStatusMeaning(availability)}</div>`;
+                    } else {
+                        result += `<div>${api.name}: <span class="status-bad">Not found</span></div>`;
+                    }
+                } catch (error) {
+                    result += `<div>${api.name}: <span class="status-bad">Error - ${error.message}</span></div>`;
+                }
+            }
+            
+            showResult('all-apis-result', result);
+        }
+
+        async function runCompleteCheck() {
+            let result = '<h3>Complete Implementation Results:</h3>';
+            result += '<div style="font-family: monospace; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px;">';
+            
+            const apis = [
+                { name: 'LanguageModel', params: null },
+                { name: 'Translator', params: { sourceLanguage: 'en', targetLanguage: 'es' } },
+                { name: 'Summarizer', params: null },
+                { name: 'Writer', params: null },
+                { name: 'Rewriter', params: null },
+                { name: 'Proofreader', params: null }
+            ];
+            
+            console.log('🔍 Running complete API availability check...');
+            
+            for (const api of apis) {
+                try {
+                    if (api.name in self) {
+                        const availability = api.params 
+                            ? await self[api.name].availability(api.params)
+                            : await self[api.name].availability();
+                        
+                        const logMessage = `${api.name}: ${availability}`;
+                        console.log(logMessage);
+                        result += `${logMessage}<br>`;
+                    } else {
+                        const logMessage = `${api.name}: Not found in browser`;
+                        console.log(logMessage);
+                        result += `${logMessage}<br>`;
+                    }
+                } catch (error) {
+                    const logMessage = `${api.name}: Error - ${error.message}`;
+                    console.log(logMessage);
+                    result += `${logMessage}<br>`;
+                }
+            }
+            
+            result += '</div>';
+            result += '<p><em>Check browser console for detailed logs</em></p>';
+            
+            showResult('complete-result', result);
+        }
+
+        // Auto-run existence check on load
+        document.addEventListener('DOMContentLoaded', checkAPIExists);
+    </script>
+</body>
+</html>

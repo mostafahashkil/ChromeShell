@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome AI Shell</title>
+    <!-- Aggressive Content Security Policy to prevent extension injection -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+    <!-- Additional security headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), payment=(), usb=()">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'pulse-slow': 'pulse 3s ease-in-out infinite',
+                        'gradient': 'gradient 8s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-20px)' }
+                        },
+                        gradient: {
+                            '0%, 100%': { backgroundPosition: '0% 50%' },
+                            '50%': { backgroundPosition: '100% 50%' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            /* Default dark theme variables */
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+            --card-bg: rgba(30, 41, 59, 0.95);
+            --card-text: #ffffff;
+            --card-text-secondary: #e2e8f0;
+            --status-bg: rgba(15, 23, 42, 0.6);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+            --card-bg: rgba(30, 41, 59, 0.95);
+            --card-text: #ffffff;
+            --card-text-secondary: #e2e8f0;
+            --status-bg: rgba(15, 23, 42, 0.6);
+        }
+
+        [data-theme="light"] {
+            --bg-primary: linear-gradient(-45deg, #f1f5f9, #f8fafc, #ffffff, #f0f9ff, #fafafa, #f8fafc);
+            --bg-glass: rgba(255, 255, 255, 0.9);
+            --border-glass: rgba(0, 0, 0, 0.15);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --card-text: #0f172a;
+            --card-text-secondary: #475569;
+            --status-bg: rgba(255, 255, 255, 0.9);
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+            transition: background 0.3s ease;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+            transition: all 0.3s ease;
+        }
+
+        .api-card {
+            transition: all 0.3s ease;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            color: var(--card-text);
+            border: 1px solid var(--border-glass);
+        }
+
+        .api-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            border-color: rgba(71, 85, 105, 0.5);
+        }
+
+        [data-theme="dark"] .api-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(51, 65, 85, 0.4);
+        }
+
+        [data-theme="dark"] .api-card:hover {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: rgba(71, 85, 105, 0.6);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        /* Theme-aware text colors */
+        .theme-text-primary { color: var(--text-primary) !important; }
+        .theme-text-secondary { color: var(--text-secondary) !important; }
+        .theme-card-text { color: var(--card-text) !important; }
+        .theme-card-text-secondary { color: var(--card-text-secondary) !important; }
+        
+        /* Override specific text colors for themes */
+        [data-theme="dark"] .text-white { color: #ffffff !important; }
+        [data-theme="dark"] .text-gray-200 { color: #e5e7eb !important; }
+        [data-theme="dark"] .text-gray-300 { color: #d1d5db !important; }
+        [data-theme="dark"] .text-gray-600 { color: #e5e7eb !important; }
+        [data-theme="dark"] .text-gray-800 { color: #ffffff !important; }
+        
+        [data-theme="light"] .text-white { color: #1f2937 !important; }
+        [data-theme="light"] .text-gray-200 { color: #374151 !important; }
+        [data-theme="light"] .text-gray-300 { color: #4b5563 !important; }
+        [data-theme="light"] .text-gray-600 { color: #4b5563 !important; }
+        [data-theme="light"] .text-gray-800 { color: #1f2937 !important; }
+
+        /* Status card theming */
+        .status-card {
+            background: var(--status-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        /* API availability status styles */
+        .status-good { 
+            color: #10b981; 
+            font-weight: bold; 
+        }
+        
+        .status-bad { 
+            color: #ef4444; 
+            font-weight: bold; 
+        }
+        
+        .status-warn { 
+            color: #f59e0b; 
+            font-weight: bold; 
+        }
+
+        /* Smooth theme transitions */
+        * {
+            transition: color 0.3s ease, background-color 0.3s ease, border-color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen" data-theme="dark"></body>
+    <!-- Header -->
+    <header id="header-main" class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-robot text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold theme-text-primary">CAS - Chrome AI Shell</h1>
+                        <p class="text-sm theme-text-secondary">Dashboard for Chrome Built-in AI APIs - Gemini nano</p>
+                        <p class="text-sm theme-text-secondary">Version 1</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- Theme Toggle -->
+                    <button id="theme-toggle-btn" class="glass-morphism rounded-lg p-3 theme-text-primary hover:bg-white hover:bg-opacity-20 transition-all" title="Toggle theme">
+                        <i id="themeIcon" class="fas fa-moon text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content" class="w-full py-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Hero Section -->
+    <section id="hero-section" class="text-center mb-12">
+            <div id="hero-panel" class="glass-morphism rounded-2xl p-8 mb-8">
+                <h2 class="text-4xl font-bold theme-text-primary mb-4 animate-pulse-slow">
+                    Explore Chrome's Built-in AI APIs
+                </h2>
+                <p class="text-xl theme-text-secondary mb-6 max-w-3xl mx-auto">
+                    Access powerful AI capabilities directly in your browser. No external API keys required - 
+                    everything runs locally with Chrome's built-in AI models.
+                </p>
+                <div class="flex flex-wrap justify-center gap-4">
+                    <div class="glass-morphism rounded-lg px-4 py-2 text-sm theme-text-primary">
+                        <i class="fas fa-shield-alt mr-2 text-green-300"></i>Privacy-First
+                    </div>
+                    <div class="glass-morphism rounded-lg px-4 py-2 text-sm theme-text-primary">
+                        <i class="fas fa-bolt mr-2 text-yellow-300"></i>Lightning Fast
+                    </div>
+                    <div class="glass-morphism rounded-lg px-4 py-2 text-sm theme-text-primary">
+                        <i class="fas fa-plug mr-2 text-blue-300"></i>No Setup Required
+                    </div>
+                </div>
+            </div>
+        </section>
+            <div id="api-status-panel" class="glass-morphism rounded-2xl p-6">
+                <h3 class="text-2xl font-bold theme-text-primary mb-6 flex items-center">
+                    <i class="fas fa-tachometer-alt mr-3 text-blue-300"></i>
+                    API Status Dashboard
+                </h3>
+                <div id="api-status-dashboard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <!-- API status cards will be populated by JavaScript -->
+                </div>
+                
+                <!-- API Checking Controls -->
+                <div class="border-t border-gray-300 dark:border-gray-600 pt-6">
+                    <h4 class="text-lg font-semibold theme-text-primary mb-4 flex items-center">
+                        <i class="fas fa-flask mr-2 text-yellow-300"></i>
+                        API Availability Testing
+                    </h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <button id="check-api-existence-btn" onclick="showAPIExistenceCheck()" class="bg-gradient-to-r from-blue-500 to-indigo-500 text-white py-2 px-4 rounded-lg hover:shadow-lg transition-all transform hover:scale-105">
+                            <i class="fas fa-search mr-2"></i>Check API Existence
+                        </button>
+                        <button id="test-availability-btn" onclick="showAvailabilityCheck()" class="bg-gradient-to-r from-green-500 to-emerald-500 text-white py-2 px-4 rounded-lg hover:shadow-lg transition-all transform hover:scale-105">
+                            <i class="fas fa-check-circle mr-2"></i>Test Availability
+                        </button>
+                        <button id="complete-check-btn" onclick="showCompleteCheck()" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 px-4 rounded-lg hover:shadow-lg transition-all transform hover:scale-105">
+                            <i class="fas fa-cogs mr-2"></i>Complete Check
+                        </button>
+                    </div>
+                    
+                    <!-- Results display area -->
+                    <div id="api-test-results-panel" class="hidden">
+                        <div class="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 border">
+                            <div id="test-results-content"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Categories -->
+    <section id="api-categories-section" class="space-y-12">
+            
+            <!-- Language & Translation -->
+            <div id="language-translation-category" class="api-category">
+                <h3 class="text-3xl font-bold theme-text-primary mb-8 flex items-center">
+                    <i class="fas fa-language mr-4 text-purple-300"></i>
+                    Language & Translation
+                </h3>
+                <div id="language-translation-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Translation API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-globe text-white text-xl"></i>
+                            </div>
+                            <span id="translation-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Translation API</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Translate text between 100+ languages with high accuracy and context awareness.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Multi-language</span>
+                            <span class="px-2 py-1 bg-pink-100 text-pink-800 text-xs rounded-full">Real-time</span>
+                        </div>
+                        <button id="launch-translator-btn" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('translation')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Translator
+                        </button>
+                    </div>
+
+                    <!-- Language Detection -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-search text-white text-xl"></i>
+                            </div>
+                            <span id="detection-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Language Detection</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Automatically identify the language of any text with high confidence scores.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">Auto-detect</span>
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Confidence scores</span>
+                        </div>
+                        <button id="launch-detection-btn" class="w-full bg-gradient-to-r from-indigo-500 to-blue-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('detection')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Detector
+                        </button>
+                    </div>
+
+                    <!-- Prompt API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-teal-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-comments text-white text-xl"></i>
+                            </div>
+                            <span id="prompt-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Language Model API</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Advanced conversational AI with context understanding and multi-turn dialogues.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Conversational</span>
+                            <span class="px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">Context-aware</span>
+                        </div>
+                        <button id="launch-prompt-btn" class="w-full bg-gradient-to-r from-green-500 to-teal-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('prompt')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Prompt API
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Text Processing -->
+            <div id="text-processing-category" class="api-category">
+                <h3 class="text-3xl font-bold theme-text-primary mb-8 flex items-center">
+                    <i class="fas fa-file-alt mr-4 text-blue-300"></i>
+                    Text Processing & Analysis
+                </h3>
+                <div id="text-processing-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Summarizer API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-compress-alt text-white text-xl"></i>
+                            </div>
+                            <span id="summarizer-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Summarizer API ....</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Generate concise summaries, key points, and extract main topics from any text.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">Key points</span>
+                            <span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Topics</span>
+                        </div>
+                        <button id="launch-summarizer-btn" class="w-full bg-gradient-to-r from-orange-500 to-red-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('summarizer')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Summarizer
+                        </button>
+                    </div>
+
+                    <!-- Writer API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-pen-fancy text-white text-xl"></i>
+                            </div>
+                            <span id="writer-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Writer API</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Generate creative content, emails, articles, and structured text with various tones.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-cyan-100 text-cyan-800 text-xs rounded-full">Creative</span>
+                            <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Multiple tones</span>
+                        </div>
+                        <button id="launch-writer-btn" class="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('writer')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Writer
+                        </button>
+                    </div>
+
+                    <!-- Rewriter API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-violet-500 to-purple-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-edit text-white text-xl"></i>
+                            </div>
+                            <span id="rewriter-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Rewriter API</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Transform text style, tone, and complexity while preserving meaning and intent.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-violet-100 text-violet-800 text-xs rounded-full">Style transform</span>
+                            <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">Tone control</span>
+                        </div>
+                        <button id="launch-rewriter-btn" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('rewriter')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Rewriter
+                        </button>
+                    </div>
+
+                    <!-- Proofreader API -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-spell-check text-white text-xl"></i>
+                            </div>
+                            <span id="proofreader-status" class="status-indicator status-loading"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Proofreader API</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Identify and correct grammar, spelling, punctuation, and style errors with detailed explanations.</p>
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span class="px-2 py-1 bg-emerald-100 text-emerald-800 text-xs rounded-full">Grammar check</span>
+                            <span class="px-2 py-1 bg-teal-100 text-teal-800 text-xs rounded-full">Spell check</span>
+                        </div>
+                        <button id="launch-proofreader-btn" class="w-full bg-gradient-to-r from-red-500 to-orange-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('proofreader')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Proofreader
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Advanced Features -->
+            <div id="advanced-features-category" class="api-category">
+                <h3 class="text-3xl font-bold theme-text-primary mb-8 flex items-center">
+                    <i class="fas fa-brain mr-4 text-pink-300"></i>
+                    Advanced AI Features
+                </h3>
+                <div id="advanced-features-cards" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- Content Analysis -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-pink-500 to-rose-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-chart-line text-white text-xl"></i>
+                            </div>
+                            <span class="status-indicator status-ready"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Content Analysis Suite</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Comprehensive text analysis including sentiment, emotion, safety, and content classification.</p>
+                        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+                            <span class="px-2 py-1 bg-pink-100 text-pink-800 rounded-full text-center">Sentiment Analysis</span>
+                            <span class="px-2 py-1 bg-rose-100 text-rose-800 rounded-full text-center">Safety Detection</span>
+                            <span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-center">Spam Detection</span>
+                            <span class="px-2 py-1 bg-orange-100 text-orange-800 rounded-full text-center">Content Type</span>
+                        </div>
+                        <button id="launch-analyzer-btn" class="w-full bg-gradient-to-r from-pink-500 to-rose-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('analysis')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Analyzer
+                        </button>
+                    </div>
+
+                    <!-- Workflow Designer -->
+                    <div class="api-card rounded-xl p-6 shadow-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-green-500 rounded-lg flex items-center justify-center">
+                                <i class="fas fa-project-diagram text-white text-xl"></i>
+                            </div>
+                            <span class="status-indicator status-ready"></span>
+                        </div>
+                        <h4 class="text-xl font-bold theme-card-text mb-2">Workflow Designer</h4>
+                        <p class="theme-card-text-secondary text-sm mb-4">Create complex AI pipelines combining multiple APIs for automated text processing workflows.</p>
+                        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+                            <span class="px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full text-center">Multi-step</span>
+                            <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-center">Automation</span>
+                            <span class="px-2 py-1 bg-lime-100 text-lime-800 rounded-full text-center">Visual Builder</span>
+                            <span class="px-2 py-1 bg-teal-100 text-teal-800 rounded-full text-center">Export/Import</span>
+                        </div>
+                        <button id="launch-designer-btn" class="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-white py-2 rounded-lg hover:shadow-lg transition-all transform hover:scale-105" onclick="openAPI('workflow')">
+                            <i class="fas fa-external-link-alt mr-2"></i>Launch Designer
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+        </section>
+
+        </div> <!-- Close centered container -->
+    </main>
+
+    <!-- Footer -->
+    <footer id="footer-main" class="w-full mt-16">
+        <div class="glass-morphism p-6 text-center">
+            <div class="flex items-center justify-center space-x-6 mb-4">
+            </div>
+            <p class="theme-text-primary text-sm">
+                Built for <strong>Google Hackathon 2025</strong>
+            </p>
+        </div>
+    </footer>
+
+    <script src="app.js"></script>
+    
+<!-- Setup Guide Modal -->
+<div id="setup-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50" aria-modal="true" role="dialog">
+    <div id="setup-modal-content" class="glass-morphism rounded-2xl p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto shadow-2xl border border-gray-300 dark:border-gray-700">
+    <div id="setup-modal-header" class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold theme-text-primary">Setup Chrome Built-in AI</h2>
+            <button id="close-setup-guide-btn" onclick="closeSetupGuide()" class="theme-text-secondary hover:theme-text-primary transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+    <div id="setup-modal-body">
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold theme-text-primary mb-3">Requirements:</h3>
+                <ul class="list-disc list-inside space-y-2 theme-text-secondary">
+                    <li>Chrome Canary 127+ or Chrome Dev 127+</li>
+                    <li>Enable specific Chrome flags</li>
+                    <li>Download AI models (automatic)</li>
+                </ul>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold theme-text-primary mb-3">Step 1: Download Chrome Canary</h3>
+                <p class="theme-text-secondary mb-3">Chrome Canary is required for the latest AI features:</p>
+                <a href="https://www.google.com/chrome/canary/" target="_blank" 
+                   class="inline-flex items-center bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    <i class="fas fa-download mr-2"></i>Download Chrome Canary
+                </a>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold theme-text-primary mb-3">Step 2: Enable Chrome Flags</h3>
+                <p class="theme-text-secondary mb-3">Copy and paste these URLs in Chrome Canary:</p>
+                <div class="space-y-3">
+                    <div class="glass-morphism p-3 rounded border border-gray-200 dark:border-gray-700">
+                        <p class="font-medium theme-text-primary mb-1">Gemini Nano:</p>
+                        <div class="flex items-center gap-2">
+                            <code class="bg-white dark:bg-gray-900 px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#optimization-guide-on-device-model</code>
+                            <button onclick="copyToClipboard('chrome://flags/#optimization-guide-on-device-model')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <p class="text-sm theme-text-secondary mt-1">Set to "Enabled BypassPerfRequirement"</p>
+                    </div>
+
+                    <div class="glass-morphism p-3 rounded border border-gray-200 dark:border-gray-700">
+                        <p class="font-medium theme-text-primary mb-1">Built-in AI API:</p>
+                        <div class="flex items-center gap-2">
+                            <code class="bg-white dark:bg-gray-900 px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#prompt-api-for-gemini-nano</code>
+                            <button onclick="copyToClipboard('chrome://flags/#prompt-api-for-gemini-nano')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <p class="text-sm theme-text-secondary mt-1">Set to "Enabled"</p>
+                    </div>
+
+                    <div id="api-specific-flags"></div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold theme-text-primary mb-3">Step 3: Restart Chrome</h3>
+                <p class="theme-text-secondary">After enabling the flags, restart Chrome Canary completely.</p>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold theme-text-primary mb-3">Step 4: First Use</h3>
+                <p class="theme-text-secondary">When you first use an AI feature, Chrome will automatically download the required models. This may take a few minutes.</p>
+            </div>
+
+            <div class="glass-morphism border border-yellow-200 dark:border-yellow-400 rounded-lg p-4">
+                <div class="flex items-start">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 mt-1 mr-3"></i>
+                    <div>
+                        <h4 class="font-semibold theme-text-primary">Note:</h4>
+                        <p class="theme-text-secondary text-sm">These are experimental features and may not work on all devices. A stable internet connection is required for model downloads.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button id="close-setup-guide-btn" onclick="closeSetupGuide()" class="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Setup Guide Functions
+function showSetupGuide(apiType) {
+    const modal = document.getElementById('setup-modal');
+    const apiFlags = document.getElementById('api-specific-flags');
+    
+    // Add API-specific flags if needed
+    const apiSpecificContent = {
+        'translator': `
+            <div class="bg-gray-100 p-3 rounded border">
+                <p class="font-medium text-gray-700 mb-1">Translation API:</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#translation-api</code>
+                    <button onclick="copyToClipboard('chrome://flags/#translation-api')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set to "Enabled"</p>
+            </div>`,
+        'language-detector': `
+            <div class="bg-gray-100 p-3 rounded border">
+                <p class="font-medium text-gray-700 mb-1">Language Detection API:</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#language-detection-api</code>
+                    <button onclick="copyToClipboard('chrome://flags/#language-detection-api')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set to "Enabled"</p>
+            </div>`,
+        'summarizer': `
+            <div class="bg-gray-100 p-3 rounded border">
+                <p class="font-medium text-gray-700 mb-1">Summarization API:</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#summarization-api-for-gemini-nano</code>
+                    <button onclick="copyToClipboard('chrome://flags/#summarization-api-for-gemini-nano')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set to "Enabled"</p>
+            </div>`,
+        'writer': `
+            <div class="bg-gray-100 p-3 rounded border">
+                <p class="font-medium text-gray-700 mb-1">Writer API:</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#writer-api-for-gemini-nano</code>
+                    <button onclick="copyToClipboard('chrome://flags/#writer-api-for-gemini-nano')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set to "Enabled"</p>
+            </div>`,
+        'rewriter': `
+            <div class="bg-gray-100 p-3 rounded border">
+                <p class="font-medium text-gray-700 mb-1">Rewriter API:</p>
+                <div class="flex items-center gap-2">
+                    <code class="bg-white px-2 py-1 rounded border flex-1 text-sm">chrome://flags/#rewriter-api-for-gemini-nano</code>
+                    <button onclick="copyToClipboard('chrome://flags/#rewriter-api-for-gemini-nano')" class="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Set to "Enabled"</p>
+            </div>`
+    };
+    
+    apiFlags.innerHTML = apiSpecificContent[apiType] || '';
+    modal.classList.remove('hidden');
+}
+
+function closeSetupGuide() {
+    const modal = document.getElementById('setup-modal');
+    modal.classList.add('hidden');
+}
+
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Show a brief success indication
+        event.target.innerHTML = '<i class="fas fa-check"></i>';
+        setTimeout(() => {
+            event.target.innerHTML = '<i class="fas fa-copy"></i>';
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+}
+
+// Close modal when clicking outside
+document.getElementById('setup-modal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeSetupGuide();
+    }
+});
+
+// API Availability Checking Functions (from availability-guide.html)
+function showResult(elementId, content, isSuccess = true) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.innerHTML = content;
+        element.style.display = 'block';
+        element.style.borderLeftColor = isSuccess ? '#4CAF50' : '#f44336';
+    }
+}
+
+async function checkAPIExists() {
+    const apis = ['LanguageModel', 'Translator', 'Summarizer', 'Writer', 'Rewriter', 'Proofreader'];
+    let result = '<h3>API Existence Check:</h3>';
+    
+    apis.forEach(api => {
+        const exists = api in self;
+        result += `<div>${api}: <span class="${exists ? 'status-good' : 'status-bad'}">${exists ? '✅ Found' : '❌ Not Found'}</span></div>`;
+    });
+    
+    return result;
+}
+
+async function checkAvailability() {
+    let result = '<h3>Availability Check (LanguageModel):</h3>';
+    
+    try {
+        if ('LanguageModel' in self) {
+            const availability = await LanguageModel.availability();
+            result += `<div>Status: <span class="status-good">${availability}</span></div>`;
+            result += `<div>Meaning: ${getStatusMeaning(availability)}</div>`;
+        } else {
+            result += '<div><span class="status-bad">❌ LanguageModel API not found</span></div>';
+        }
+    } catch (error) {
+        result += `<div><span class="status-bad">❌ Error: ${error.message}</span></div>`;
+    }
+    
+    return result;
+}
+
+function getStatusMeaning(availability) {
+    switch(availability) {
+        case 'readily': return '🟢 Ready to use immediately';
+        case 'after-download': return '🟡 Ready after downloading model';
+        case 'no': return '🔴 Not available';
+        default: return '⚪ Unknown status';
+    }
+}
+
+async function checkAllAPIs() {
+    const apis = [
+        { name: 'LanguageModel', params: null },
+        { name: 'Translator', params: { sourceLanguage: 'en', targetLanguage: 'es' } },
+        { name: 'Summarizer', params: null },
+        { name: 'Writer', params: null },
+        { name: 'Rewriter', params: null },
+        { name: 'Proofreader', params: null }
+    ];
+    
+    let result = '<h3>All APIs Check:</h3>';
+    
+    for (const api of apis) {
+        try {
+            if (api.name in self) {
+                const availability = api.params 
+                    ? await self[api.name].availability(api.params)
+                    : await self[api.name].availability();
+                
+                const statusClass = (availability === 'readily' || availability === 'after-download') 
+                    ? 'status-good' : 'status-bad';
+                
+                result += `<div>${api.name}: <span class="${statusClass}">${availability}</span> - ${getStatusMeaning(availability)}</div>`;
+                
+                // Update individual API status indicators
+                updateAPIStatusIndicator(api.name.toLowerCase(), availability);
+            } else {
+                result += `<div>${api.name}: <span class="status-bad">Not found</span></div>`;
+                updateAPIStatusIndicator(api.name.toLowerCase(), 'not-found');
+            }
+        } catch (error) {
+            result += `<div>${api.name}: <span class="status-bad">Error - ${error.message}</span></div>`;
+            updateAPIStatusIndicator(api.name.toLowerCase(), 'error');
+        }
+    }
+    
+    return result;
+}
+
+function updateAPIStatusIndicator(apiName, availability) {
+    const statusMap = {
+        'languagemodel': 'prompt-status',
+        'translator': 'translation-status', 
+        'summarizer': 'summarizer-status',
+        'writer': 'writer-status',
+        'rewriter': 'rewriter-status',
+        'proofreader': 'proofreader-status'
+    };
+    
+    const elementId = statusMap[apiName];
+    const element = document.getElementById(elementId);
+    
+    if (element) {
+        // Remove all status classes
+        element.classList.remove('status-ready', 'status-loading', 'status-unavailable');
+        
+        // Add appropriate status class
+        if (availability === 'readily' || availability === 'after-download') {
+            element.classList.add('status-ready');
+            element.title = `${apiName} API: ${availability}`;
+        } else {
+            element.classList.add('status-unavailable');
+            element.title = `${apiName} API: ${availability || 'not available'}`;
+        }
+    }
+}
+
+async function runCompleteAPICheck() {
+    let result = '<h3>Complete API Availability Check:</h3>';
+    result += '<div style="font-family: monospace; background: rgba(0,0,0,0.1); padding: 10px; border-radius: 5px; margin: 10px 0;">';
+    
+    const apis = [
+        { name: 'LanguageModel', params: null },
+        { name: 'Translator', params: { sourceLanguage: 'en', targetLanguage: 'es' } },
+        { name: 'Summarizer', params: null },
+        { name: 'Writer', params: null },
+        { name: 'Rewriter', params: null },
+        { name: 'Proofreader', params: null }
+    ];
+    
+    console.log('🔍 Running complete API availability check...');
+    
+    for (const api of apis) {
+        try {
+            if (api.name in self) {
+                const availability = api.params 
+                    ? await self[api.name].availability(api.params)
+                    : await self[api.name].availability();
+                
+                const logMessage = `${api.name}: ${availability}`;
+                console.log(logMessage);
+                result += `${logMessage}<br>`;
+                
+                // Update status indicators
+                updateAPIStatusIndicator(api.name.toLowerCase(), availability);
+            } else {
+                const logMessage = `${api.name}: Not found in browser`;
+                console.log(logMessage);
+                result += `${logMessage}<br>`;
+                updateAPIStatusIndicator(api.name.toLowerCase(), 'not-found');
+            }
+        } catch (error) {
+            const logMessage = `${api.name}: Error - ${error.message}`;
+            console.log(logMessage);
+            result += `${logMessage}<br>`;
+            updateAPIStatusIndicator(api.name.toLowerCase(), 'error');
+        }
+    }
+    
+    result += '</div>';
+    result += '<p><em>Check browser console for detailed logs</em></p>';
+    
+    // Update the API status dashboard
+    updateAPIStatusDashboard();
+    
+    return result;
+}
+
+function updateAPIStatusDashboard() {
+    const apiStatusContainer = document.getElementById('apiStatus');
+    if (!apiStatusContainer) return;
+    
+    const apis = [
+        { name: 'LanguageModel', displayName: 'Language Model', icon: 'fas fa-brain', color: 'from-blue-500 to-indigo-500' },
+        { name: 'Translator', displayName: 'Translator', icon: 'fas fa-globe', color: 'from-purple-500 to-pink-500' },
+        { name: 'Summarizer', displayName: 'Summarizer', icon: 'fas fa-compress-alt', color: 'from-green-500 to-emerald-500' },
+        { name: 'Writer', displayName: 'Writer', icon: 'fas fa-pen-fancy', color: 'from-orange-500 to-red-500' },
+        { name: 'Rewriter', displayName: 'Rewriter', icon: 'fas fa-edit', color: 'from-cyan-500 to-blue-500' },
+        { name: 'Proofreader', displayName: 'Proofreader', icon: 'fas fa-spell-check', color: 'from-teal-500 to-green-500' }
+    ];
+    
+    let html = '';
+    
+    apis.forEach(api => {
+        const exists = api.name in self;
+        const statusClass = exists ? 'status-ready' : 'status-unavailable';
+        const statusText = exists ? 'Available' : 'Not Found';
+        
+        html += `
+            <div class="status-card rounded-xl p-4 text-center transition-all hover:scale-105">
+                <div class="w-12 h-12 bg-gradient-to-br ${api.color} rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <i class="${api.icon} text-white text-xl"></i>
+                </div>
+                <h4 class="font-bold theme-text-primary text-sm mb-1">${api.displayName}</h4>
+                <span class="status-indicator ${statusClass} inline-block w-3 h-3 rounded-full mb-2"></span>
+                <p class="theme-text-secondary text-xs">${statusText}</p>
+            </div>
+        `;
+    });
+    
+    apiStatusContainer.innerHTML = html;
+}
+
+// Functions for manual API testing buttons
+async function showAPIExistenceCheck() {
+    const resultContainer = document.getElementById('api-test-results-panel');
+    const resultContent = document.getElementById('test-results-content');
+    
+    const result = await checkAPIExists();
+    resultContent.innerHTML = result;
+    resultContainer.classList.remove('hidden');
+}
+
+async function showAvailabilityCheck() {
+    const resultContainer = document.getElementById('api-test-results-panel');
+    const resultContent = document.getElementById('test-results-content');
+    
+    const result = await checkAvailability();
+    resultContent.innerHTML = result;
+    resultContainer.classList.remove('hidden');
+}
+
+async function showCompleteCheck() {
+    const resultContainer = document.getElementById('api-test-results-panel');
+    const resultContent = document.getElementById('test-results-content');
+    
+    const result = await runCompleteAPICheck();
+    resultContent.innerHTML = result;
+    resultContainer.classList.remove('hidden');
+}
+
+// Helper function to check individual API availability (shared with app.js)
+async function checkIndividualAPIAvailability(apiType, apiName) {
+    const result = {
+        exists: false,
+        availability: 'no',
+        error: null
+    };
+
+    try {
+        // Check if API exists in browser
+        if (apiName in self) {
+            result.exists = true;
+            
+            // Check availability with proper parameters
+            let availability;
+            if (apiName === 'Translator') {
+                availability = await self[apiName].availability({
+                    sourceLanguage: 'en', 
+                    targetLanguage: 'es'
+                });
+            } else {
+                availability = await self[apiName].availability();
+            }
+            
+            result.availability = availability;
+            console.log(`✅ ${apiName} availability check: ${availability}`);
+        } else {
+            console.log(`❌ ${apiName} not found in browser`);
+        }
+    } catch (error) {
+        result.error = error.message;
+        console.log(`❌ ${apiName} availability check failed: ${error.message}`);
+    }
+
+    return result;
+}
+
+// Auto-run API check on page load
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Chrome AI Shell loaded - Checking API availability...');
+    
+    // Run the complete API check
+    await runCompleteAPICheck();
+    
+    // Show a brief result in the console
+    console.log('✅ API availability check completed');
+});
+</script>
+
+<script src="app.js"></script>
+</body>
+</html>

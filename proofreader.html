@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proofreader API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .proofread-output {
+            min-height: 400px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .sample-template {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sample-template:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .error-highlight {
+            background: rgba(239, 68, 68, 0.2);
+            border-bottom: 2px wavy #ef4444;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .error-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            border: 1px solid #374151;
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .error-highlight:hover .error-tooltip {
+            opacity: 1;
+        }
+
+        .correction-item {
+            border-left: 4px solid #06b6d4;
+            background: rgba(6, 182, 212, 0.1);
+            margin-bottom: 16px;
+            padding: 16px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .correction-original {
+            background: rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-decoration: line-through;
+        }
+
+        .correction-suggested {
+            background: rgba(34, 197, 94, 0.2);
+            color: #86efac;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .error-type-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .error-grammar { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
+        .error-spelling { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+        .error-punctuation { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+        .error-style { background: rgba(6, 182, 212, 0.2); color: #67e8f9; }
+
+        .stats-ring {
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+
+        .stats-ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .ring-background {
+            fill: transparent;
+            stroke: #374151;
+            stroke-width: 4;
+        }
+
+        .ring-progress {
+            fill: transparent;
+            stroke: #10b981;
+            stroke-width: 4;
+            stroke-dasharray: 0 188;
+            transition: stroke-dasharray 0.5s ease;
+        }
+
+        .streaming-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #06b6d4;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-spell-check text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Proofreader API</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Proofreading Service</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Proofreader API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <!-- Main Proofreading Interface -->
+                <div class="lg:col-span-3 space-y-6">
+                    
+                    <!-- Proofreading Settings -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-cog text-emerald-300 mr-3"></i>
+                            Proofreading Settings
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Format</label>
+                                <select id="format-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="markdown" selected>Markdown</option>
+                                    <option value="plain-text">Plain Text</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Mode</label>
+                                <select id="mode-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="batch">Complete</option>
+                                    <option value="streaming" selected>Streaming</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Error Display</label>
+                                <select id="error-display-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="inline" selected>Inline Highlights</option>
+                                    <option value="list">Error List</option>
+                                    <option value="both">Both Views</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-200 mb-2">Shared Context (Optional)</label>
+                            <input type="text" id="shared-context" 
+                                   class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                                   placeholder="e.g., 'Academic paper', 'Business email', 'Creative writing'">
+                        </div>
+                    </div>
+
+                    <!-- Input Text -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                            <i class="fas fa-file-text text-blue-300 mr-3"></i>
+                            Text to Proofread
+                        </h3>
+                        
+                        <textarea 
+                            id="input-text" 
+                            class="w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-vertical"
+                            placeholder="Enter or paste the text you want to proofread..."
+                            rows="8"
+                        ></textarea>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400">
+                                <span id="input-char-count">0</span> characters • 
+                                <span id="input-word-count">0</span> words
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="clear-text-btn" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
+                                    <i class="fas fa-trash mr-1"></i> Clear
+                                </button>
+                                <button id="proofread-btn" class="bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-8 py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="fas fa-spell-check mr-2"></i>
+                                    <span id="proofread-btn-text">Proofread Text</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Proofread Results -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-check-double text-emerald-300 mr-3"></i>
+                                Proofread Results
+                            </h3>
+                            <div class="flex items-center space-x-4">
+                                <button id="accept-all-btn" class="hidden px-4 py-2 text-sm bg-green-500 bg-opacity-20 text-green-300 rounded-lg hover:bg-opacity-30 transition-colors">
+                                    <i class="fas fa-check-circle mr-1"></i> Accept All
+                                </button>
+                                <button id="stop-proofread-btn" class="hidden bg-red-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
+                                    <i class="fas fa-stop mr-2"></i>Stop
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="proofread-output relative bg-gray-900 bg-opacity-50 border border-gray-600 rounded-lg p-4">
+                            <div id="proofread-output" class="text-white">
+                                <span id="streaming-cursor" class="streaming-cursor hidden"></span>
+                            </div>
+                            <div id="proofread-placeholder" class="text-gray-500 flex items-center justify-center h-full">
+                                <div class="text-center">
+                                    <i class="fas fa-spell-check text-4xl mb-4 opacity-50"></i>
+                                    <p>Proofread results will appear here...</p>
+                                </div>
+                            </div>
+                            <div id="proofread-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 rounded-lg">
+                                <div class="flex items-center space-x-2">
+                                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-300"></div>
+                                    <span class="text-emerald-300">Proofreading text...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400" id="proofread-info">
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="copy-corrected-btn" class="px-4 py-2 text-sm text-green-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-copy mr-1"></i> Copy Corrected
+                                </button>
+                                <button id="export-report-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-download mr-1"></i> Export Report
+                                </button>
+                                <button id="regenerate-btn" class="px-4 py-2 text-sm text-emerald-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-redo mr-1"></i> Re-check
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error Details (shown when error-display is 'list' or 'both') -->
+                    <div id="error-details-section" class="hidden glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                            <i class="fas fa-exclamation-circle text-yellow-300 mr-3"></i>
+                            Error Details
+                        </h3>
+                        <div id="error-details-list" class="space-y-4">
+                            <!-- Error details will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="lg:col-span-1 space-y-6">
+                    
+                    <!-- Sample Texts -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-clipboard-list text-blue-300 mr-2"></i>
+                            Sample Texts
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Their going to the store to buy some groceries. Its raining outside, so there taking an umbrella with them."
+                                 data-context="Casual writing">
+                                <div class="text-sm font-medium text-white mb-1">Basic Grammar</div>
+                                <div class="text-xs text-gray-300">Common grammar mistakes</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="The companie's annual report shoed significant groth in quaterly earnings. Management beleives this trend will continu next year."
+                                 data-context="Business document">
+                                <div class="text-sm font-medium text-white mb-1">Spelling Errors</div>
+                                <div class="text-xs text-gray-300">Multiple spelling mistakes</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="We need to discuss the project timeline However we should also consider the budget constraints. What do you think about this approach"
+                                 data-context="Professional communication">
+                                <div class="text-sm font-medium text-white mb-1">Punctuation Issues</div>
+                                <div class="text-xs text-gray-300">Missing punctuation marks</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="This is a really really important issue that we should definitely address because it's very very significant and impacts our operations significantly."
+                                 data-context="Formal writing">
+                                <div class="text-sm font-medium text-white mb-1">Style Improvements</div>
+                                <div class="text-xs text-gray-300">Redundancy and flow issues</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="The research indicates that, environmental factors play a crucial role in determining outcomes. However; the sample size was limited, which affect's the reliability of results."
+                                 data-context="Academic paper">
+                                <div class="text-sm font-medium text-white mb-1">Academic Text</div>
+                                <div class="text-xs text-gray-300">Mixed error types</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Thanks for you're email! We're exited to announce that are new product is now availible. Please let us no if you have any questions."
+                                 data-context="Marketing email">
+                                <div class="text-sm font-medium text-white mb-1">Marketing Copy</div>
+                                <div class="text-xs text-gray-300">Customer communication</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Proofreading Stats -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-chart-pie text-emerald-300 mr-2"></i>
+                            Error Analysis
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Total Errors</span>
+                                <span id="total-errors" class="text-lg font-bold text-red-400">0</span>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-300">Grammar</span>
+                                    <span id="grammar-errors" class="text-xs font-semibold text-red-400">0</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-300">Spelling</span>
+                                    <span id="spelling-errors" class="text-xs font-semibold text-yellow-400">0</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-300">Punctuation</span>
+                                    <span id="punctuation-errors" class="text-xs font-semibold text-purple-400">0</span>
+                                </div>
+                                
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs text-gray-300">Style</span>
+                                    <span id="style-errors" class="text-xs font-semibold text-cyan-400">0</span>
+                                </div>
+                            </div>
+
+                            <div class="mt-6">
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-sm text-gray-300">Accuracy Score</span>
+                                    <span id="accuracy-score" class="text-sm font-semibold text-emerald-300">100%</span>
+                                </div>
+                                <div class="stats-ring mx-auto">
+                                    <svg width="60" height="60">
+                                        <circle cx="30" cy="30" r="26" class="ring-background"></circle>
+                                        <circle cx="30" cy="30" r="26" class="ring-progress" id="accuracy-ring"></circle>
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span id="accuracy-percent" class="text-xs font-bold text-emerald-300">100</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-between items-center pt-4 border-t border-gray-600">
+                                <span class="text-sm text-gray-300">Processing Time</span>
+                                <span id="processing-time" class="text-sm font-semibold text-emerald-300">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tips -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-lightbulb text-yellow-300 mr-2"></i>
+                            Proofreading Tips
+                        </h3>
+                        
+                        <ul class="space-y-3 text-xs text-gray-300">
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-emerald-300 mr-2 mt-1"></i>
+                                <span>Hover over highlighted errors to see suggestions</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-emerald-300 mr-2 mt-1"></i>
+                                <span>Provide context for domain-specific checking</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-emerald-300 mr-2 mt-1"></i>
+                                <span>Use streaming mode to see real-time corrections</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-emerald-300 mr-2 mt-1"></i>
+                                <span>Check the error details panel for explanations</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class ProofreaderApp {
+            constructor() {
+                this.proofreader = null;
+                this.isProofreading = false;
+                this.currentController = null;
+                this.inputText = '';
+                this.correctedText = '';
+                this.errors = [];
+                this.apiCorrections = [];
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.updateUI();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    console.log('Checking Proofreader API availability...');
+                    
+                    if (!('Proofreader' in self)) {
+                        console.log('Proofreader API not found in window/self');
+                        throw new Error('Proofreader API not supported');
+                    }
+                    
+                    console.log('Proofreader API found, checking availability...');
+                    const availability = await Proofreader.availability();
+                    console.log('API availability result:', availability);
+                    
+                    if (availability === 'unavailable') {
+                        console.log('API is unavailable');
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Proofreader API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    console.log('API is available, setting status to ready');
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                } catch (error) {
+                    console.error('Proofreader API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Proofreader API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            setupEventListeners() {
+                const inputText = document.getElementById('input-text');
+                const proofreadBtn = document.getElementById('proofread-btn');
+                const clearTextBtn = document.getElementById('clear-text-btn');
+                const copyCorrectedBtn = document.getElementById('copy-corrected-btn');
+                const exportReportBtn = document.getElementById('export-report-btn');
+                const regenerateBtn = document.getElementById('regenerate-btn');
+                const stopProofreadBtn = document.getElementById('stop-proofread-btn');
+                const acceptAllBtn = document.getElementById('accept-all-btn');
+                
+                // Input events
+                inputText.addEventListener('input', () => {
+                    this.updateCharCount();
+                    this.updateProofreadButton();
+                });
+                
+                // Button events
+                proofreadBtn.addEventListener('click', () => {
+                    console.log('Proofread button clicked!');
+                    this.proofreadText();
+                });
+                clearTextBtn.addEventListener('click', () => this.clearAll());
+                copyCorrectedBtn.addEventListener('click', () => this.copyCorrected());
+                exportReportBtn.addEventListener('click', () => this.exportReport());
+                regenerateBtn.addEventListener('click', () => this.regenerateProofread());
+                stopProofreadBtn.addEventListener('click', () => this.stopProofread());
+                acceptAllBtn.addEventListener('click', () => this.acceptAllCorrections());
+                
+                // Settings events
+                document.getElementById('error-display-select').addEventListener('change', () => {
+                    this.updateErrorDisplay();
+                });
+                
+                // Sample template events
+                document.querySelectorAll('.sample-template').forEach(template => {
+                    template.addEventListener('click', () => {
+                        const text = template.getAttribute('data-text');
+                        const context = template.getAttribute('data-context');
+                        
+                        inputText.value = text;
+                        document.getElementById('shared-context').value = context;
+                        
+                        this.updateCharCount();
+                        this.updateProofreadButton();
+                    });
+                });
+            }
+            
+            updateCharCount() {
+                const inputText = document.getElementById('input-text');
+                const charCount = document.getElementById('input-char-count');
+                const wordCount = document.getElementById('input-word-count');
+                
+                const text = inputText.value;
+                const chars = text.length;
+                const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+                
+                charCount.textContent = chars;
+                wordCount.textContent = words;
+            }
+            
+            updateProofreadButton() {
+                const inputText = document.getElementById('input-text');
+                const proofreadBtn = document.getElementById('proofread-btn');
+                
+                const hasText = inputText.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                
+                // Debug logging to identify why button might be disabled
+                console.log('Button state check:', {
+                    hasText: hasText,
+                    textLength: inputText.value.trim().length,
+                    apiAvailable: apiAvailable,
+                    apiStatusClasses: document.getElementById('api-status').className,
+                    isProofreading: this.isProofreading,
+                    shouldBeEnabled: hasText && apiAvailable && !this.isProofreading
+                });
+                
+                proofreadBtn.disabled = !(hasText && apiAvailable && !this.isProofreading);
+            }
+            
+            async createProofreader() {
+                const format = document.getElementById('format-select').value;
+                const sharedContext = document.getElementById('shared-context').value.trim();
+                
+                const options = {
+                    format: format,
+                    monitor(m) {
+                        m.addEventListener('downloadprogress', (e) => {
+                            console.log(`Downloaded ${e.loaded * 100}%`);
+                        });
+                    }
+                };
+                
+                if (sharedContext) {
+                    options.sharedContext = sharedContext;
+                }
+                
+                const proofreader = await Proofreader.create(options);
+                
+                // Debug: Log available methods
+                console.log('Proofreader instance created, available methods:', Object.getOwnPropertyNames(proofreader).concat(Object.getOwnPropertyNames(Object.getPrototypeOf(proofreader))));
+                
+                return proofreader;
+            }
+            
+            async proofreadText() {
+                console.log('proofreadText method called', { isProofreading: this.isProofreading });
+                
+                if (this.isProofreading) {
+                    console.log('Already proofreading, returning early');
+                    return;
+                }
+                
+                const inputText = document.getElementById('input-text').value.trim();
+                console.log('Input text:', inputText.length, 'characters');
+                
+                if (!inputText) {
+                    console.log('No input text, returning early');
+                    return;
+                }
+                
+                this.isProofreading = true;
+                this.currentController = new AbortController();
+                this.inputText = inputText;
+                
+                try {
+                    // Create proofreader with current settings
+                    this.proofreader = await this.createProofreader();
+                    
+                    // Prepare UI
+                    this.prepareProofreadOutput();
+                    
+                    const mode = document.getElementById('mode-select').value;
+                    const startTime = performance.now();
+                    
+                    if (mode === 'streaming') {
+                        await this.streamingProofread(inputText);
+                    } else {
+                        await this.batchProofread(inputText);
+                    }
+                    
+                    const endTime = performance.now();
+                    const processingTime = Math.round(endTime - startTime);
+                    
+                    this.displayProofreadInfo(processingTime);
+                    this.analyzeErrors();
+                    this.updateErrorDisplay();
+                    this.enableProofreadActions();
+                    
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Text proofreading failed:', error);
+                        this.showError('Text proofreading failed: ' + error.message);
+                    }
+                } finally {
+                    this.isProofreading = false;
+                    this.currentController = null;
+                    this.updateUI();
+                }
+            }
+            
+            async streamingProofread(text) {
+                const output = document.getElementById('proofread-output');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                if (cursor) cursor.classList.remove('hidden');
+                
+                try {
+                    // Check multiple possible streaming method names
+                    let streamMethod = null;
+                    const possibleMethods = ['proofreadStreaming', 'streamProofread', 'stream', 'proofreadStream'];
+                    
+                    for (const methodName of possibleMethods) {
+                        if (typeof this.proofreader[methodName] === 'function') {
+                            streamMethod = methodName;
+                            console.log(`Found streaming method: ${methodName}`);
+                            break;
+                        }
+                    }
+                    
+                    if (streamMethod) {
+                        const stream = this.proofreader[streamMethod](text, {
+                            signal: this.currentController.signal
+                        });
+                        
+                        for await (const chunk of stream) {
+                            // Debug logging to understand response format
+                            console.log('Streaming chunk received:', typeof chunk, chunk);
+                            
+                            // Handle different possible response formats
+                            if (typeof chunk === 'string') {
+                                this.correctedText = chunk;
+                                if (output) output.innerHTML = this.highlightErrors(chunk);
+                            } else if (chunk && chunk.correctedInput) {
+                                // Handle the actual API response format
+                                this.correctedText = chunk.correctedInput;
+                                this.apiCorrections = chunk.corrections || [];
+                                console.log('API corrections:', this.apiCorrections);
+                                if (output) output.innerHTML = this.highlightAPIErrors(chunk.correctedInput, this.apiCorrections);
+                            } else {
+                                const chunkText = chunk.text || chunk.content || JSON.stringify(chunk);
+                                this.correctedText = chunkText;
+                                if (output) output.innerHTML = this.highlightErrors(chunkText);
+                            }
+                        }
+                    } else {
+                        // Fallback to regular proofread method
+                        console.log('No streaming method available, falling back to batch proofreading');
+                        const result = await this.proofreader.proofread(text, {
+                            signal: this.currentController.signal
+                        });
+                        
+                        // Debug logging to understand response format
+                        console.log('Fallback batch result received:', typeof result, result);
+                        
+                        // Handle different possible response formats
+                        if (typeof result === 'string') {
+                            this.correctedText = result;
+                            if (output) output.innerHTML = this.highlightErrors(result);
+                        } else if (result && result.correctedInput) {
+                            // Handle the actual API response format
+                            this.correctedText = result.correctedInput;
+                            this.apiCorrections = result.corrections || [];
+                            console.log('API corrections:', this.apiCorrections);
+                            if (output) output.innerHTML = this.highlightAPIErrors(result.correctedInput, this.apiCorrections);
+                        } else {
+                            const resultText = result.text || result.content || JSON.stringify(result);
+                            this.correctedText = resultText;
+                            if (output) output.innerHTML = this.highlightErrors(resultText);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Streaming proofreading failed:', error);
+                    throw error;
+                }
+                
+                if (cursor) cursor.classList.add('hidden');
+            }
+            
+            async batchProofread(text) {
+                const output = document.getElementById('proofread-output');
+                const loading = document.getElementById('proofread-loading');
+                
+                if (loading) loading.classList.remove('hidden');
+                
+                const result = await this.proofreader.proofread(text, {
+                    signal: this.currentController.signal
+                });
+                
+                if (loading) loading.classList.add('hidden');
+                
+                // Debug logging to understand response format
+                console.log('Batch result received:', typeof result, result);
+                
+                // Handle different possible response formats
+                const resultText = typeof result === 'string' ? result : (result.text || result.content || JSON.stringify(result));
+                this.correctedText = resultText;
+                if (output) output.innerHTML = this.highlightErrors(resultText);
+            }
+            
+            highlightErrors(text) {
+                // This is a simplified error highlighting system
+                // In a real implementation, you'd get error positions from the API
+                this.errors = this.simulateErrors(text);
+                
+                let highlightedText = text;
+                
+                // Sort errors by position in reverse order to avoid offset issues
+                this.errors.sort((a, b) => b.start - a.start);
+                
+                this.errors.forEach(error => {
+                    const beforeText = highlightedText.substring(0, error.start);
+                    const errorText = highlightedText.substring(error.start, error.end);
+                    const afterText = highlightedText.substring(error.end);
+                    
+                    const highlighted = `<span class="error-highlight" data-error-id="${error.id}">
+                        ${errorText}
+                        <div class="error-tooltip">${error.type}: ${error.suggestion}</div>
+                    </span>`;
+                    
+                    highlightedText = beforeText + highlighted + afterText;
+                });
+                
+                return highlightedText;
+            }
+            
+            highlightAPIErrors(correctedText, corrections) {
+                // Convert API corrections to our internal error format
+                this.errors = corrections.map((correction, index) => ({
+                    id: index,
+                    start: correction.startIndex,
+                    end: correction.endIndex,
+                    type: this.determineErrorType(this.inputText.substring(correction.startIndex, correction.endIndex), correction.correction),
+                    original: this.inputText.substring(correction.startIndex, correction.endIndex),
+                    suggestion: correction.correction,
+                    severity: 'medium'
+                }));
+                
+                console.log('Converted API corrections to errors:', this.errors);
+                
+                // Highlight the corrected text showing what was changed
+                let highlightedText = correctedText;
+                const sortedCorrections = [...corrections].sort((a, b) => b.startIndex - a.startIndex);
+                
+                // Calculate offset adjustments due to text length changes
+                let offset = 0;
+                const originalText = this.inputText;
+                
+                sortedCorrections.forEach((correction, index) => {
+                    const originalLength = correction.endIndex - correction.startIndex;
+                    const newLength = correction.correction.length;
+                    const lengthDiff = newLength - originalLength;
+                    
+                    // Find the position in the corrected text
+                    const position = correction.startIndex + offset;
+                    
+                    const beforeText = highlightedText.substring(0, position);
+                    const correctionText = highlightedText.substring(position, position + newLength);
+                    const afterText = highlightedText.substring(position + newLength);
+                    
+                    const errorType = this.determineErrorType(originalText.substring(correction.startIndex, correction.endIndex), correction.correction);
+                    
+                    const highlighted = `<span class="error-highlight" data-error-id="${corrections.length - index - 1}">
+                        ${correctionText}
+                        <div class="error-tooltip">${errorType}: was "${originalText.substring(correction.startIndex, correction.endIndex)}"</div>
+                    </span>`;
+                    
+                    highlightedText = beforeText + highlighted + afterText;
+                    offset += lengthDiff;
+                });
+                
+                return highlightedText;
+            }
+            
+            determineErrorType(original, corrected) {
+                // Simple heuristics to determine error type
+                if (original.toLowerCase() === corrected.toLowerCase()) {
+                    return 'Grammar'; // Case or punctuation change
+                }
+                
+                const originalWords = original.toLowerCase().split(/\s+/);
+                const correctedWords = corrected.toLowerCase().split(/\s+/);
+                
+                if (originalWords.length === 1 && correctedWords.length === 1) {
+                    // Single word change - likely spelling
+                    const similarity = this.calculateSimilarity(originalWords[0], correctedWords[0]);
+                    if (similarity > 0.6) {
+                        return 'Spelling';
+                    }
+                }
+                
+                if (original.includes("'") || corrected.includes("'")) {
+                    return 'Grammar'; // Contractions
+                }
+                
+                return 'Grammar'; // Default to grammar
+            }
+            
+            calculateSimilarity(str1, str2) {
+                const longer = str1.length > str2.length ? str1 : str2;
+                const shorter = str1.length > str2.length ? str2 : str1;
+                
+                if (longer.length === 0) return 1.0;
+                
+                const editDistance = this.levenshteinDistance(longer, shorter);
+                return (longer.length - editDistance) / longer.length;
+            }
+            
+            levenshteinDistance(str1, str2) {
+                const matrix = [];
+                
+                for (let i = 0; i <= str2.length; i++) {
+                    matrix[i] = [i];
+                }
+                
+                for (let j = 0; j <= str1.length; j++) {
+                    matrix[0][j] = j;
+                }
+                
+                for (let i = 1; i <= str2.length; i++) {
+                    for (let j = 1; j <= str1.length; j++) {
+                        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+                            matrix[i][j] = matrix[i - 1][j - 1];
+                        } else {
+                            matrix[i][j] = Math.min(
+                                matrix[i - 1][j - 1] + 1,
+                                matrix[i][j - 1] + 1,
+                                matrix[i - 1][j] + 1
+                            );
+                        }
+                    }
+                }
+                
+                return matrix[str2.length][str1.length];
+            }
+            
+            simulateErrors(text) {
+                // Simulate error detection for demonstration
+                const errors = [];
+                let id = 0;
+                
+                // Common grammar mistakes
+                const patterns = [
+                    { regex: /their(?=\s+going)/gi, type: 'Grammar', suggestion: 'they\'re' },
+                    { regex: /there(?=\s+taking)/gi, type: 'Grammar', suggestion: 'they\'re' },
+                    { regex: /its(?=\s+raining)/gi, type: 'Grammar', suggestion: 'it\'s' },
+                    { regex: /companie's/gi, type: 'Spelling', suggestion: 'company\'s' },
+                    { regex: /shoed/gi, type: 'Spelling', suggestion: 'showed' },
+                    { regex: /groth/gi, type: 'Spelling', suggestion: 'growth' },
+                    { regex: /quaterly/gi, type: 'Spelling', suggestion: 'quarterly' },
+                    { regex: /beleives/gi, type: 'Spelling', suggestion: 'believes' },
+                    { regex: /continu(?=\s)/gi, type: 'Spelling', suggestion: 'continue' },
+                    { regex: /availible/gi, type: 'Spelling', suggestion: 'available' },
+                    { regex: /exited/gi, type: 'Spelling', suggestion: 'excited' },
+                    { regex: /you're(?=\s+email)/gi, type: 'Grammar', suggestion: 'your' },
+                    { regex: /are(?=\s+new\s+product)/gi, type: 'Grammar', suggestion: 'our' },
+                    { regex: /no(?=\s+if\s+you)/gi, type: 'Grammar', suggestion: 'know' },
+                    { regex: /affect's/gi, type: 'Grammar', suggestion: 'affects' }
+                ];
+                
+                patterns.forEach(pattern => {
+                    let match;
+                    while ((match = pattern.regex.exec(text)) !== null) {
+                        errors.push({
+                            id: id++,
+                            start: match.index,
+                            end: match.index + match[0].length,
+                            type: pattern.type,
+                            original: match[0],
+                            suggestion: pattern.suggestion,
+                            severity: pattern.type === 'Grammar' ? 'high' : pattern.type === 'Spelling' ? 'medium' : 'low'
+                        });
+                    }
+                });
+                
+                return errors;
+            }
+            
+            prepareProofreadOutput() {
+                const output = document.getElementById('proofread-output');
+                const placeholder = document.getElementById('proofread-placeholder');
+                const loading = document.getElementById('proofread-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                // Debug logging to check which elements are found
+                console.log('prepareProofreadOutput elements:', {
+                    output: !!output,
+                    placeholder: !!placeholder,
+                    loading: !!loading,
+                    cursor: !!cursor
+                });
+                
+                // Add null checks to prevent errors
+                if (placeholder) placeholder.style.display = 'none';
+                if (output) output.innerHTML = '';
+                if (loading) loading.classList.add('hidden');
+                if (cursor) cursor.classList.add('hidden');
+                
+                this.updateUI();
+            }
+            
+            displayProofreadInfo(processingTime) {
+                const info = document.getElementById('proofread-info');
+                const correctedWords = this.correctedText.trim() ? this.correctedText.trim().split(/\s+/).length : 0;
+                const correctedChars = this.correctedText.length;
+                
+                info.textContent = `${correctedWords} words, ${correctedChars} characters • Processed in ${processingTime}ms`;
+                document.getElementById('processing-time').textContent = `${processingTime}ms`;
+            }
+            
+            analyzeErrors() {
+                const errorCounts = {
+                    grammar: 0,
+                    spelling: 0,
+                    punctuation: 0,
+                    style: 0
+                };
+                
+                this.errors.forEach(error => {
+                    switch (error.type.toLowerCase()) {
+                        case 'grammar':
+                            errorCounts.grammar++;
+                            break;
+                        case 'spelling':
+                            errorCounts.spelling++;
+                            break;
+                        case 'punctuation':
+                            errorCounts.punctuation++;
+                            break;
+                        case 'style':
+                            errorCounts.style++;
+                            break;
+                    }
+                });
+                
+                const totalErrors = Object.values(errorCounts).reduce((sum, count) => sum + count, 0);
+                
+                document.getElementById('total-errors').textContent = totalErrors;
+                document.getElementById('grammar-errors').textContent = errorCounts.grammar;
+                document.getElementById('spelling-errors').textContent = errorCounts.spelling;
+                document.getElementById('punctuation-errors').textContent = errorCounts.punctuation;
+                document.getElementById('style-errors').textContent = errorCounts.style;
+                
+                // Calculate accuracy score
+                const totalWords = this.inputText.trim().split(/\s+/).length;
+                const accuracy = totalWords > 0 ? Math.max(0, ((totalWords - totalErrors) / totalWords) * 100) : 100;
+                
+                document.getElementById('accuracy-score').textContent = `${Math.round(accuracy)}%`;
+                document.getElementById('accuracy-percent').textContent = Math.round(accuracy);
+                
+                // Update accuracy ring
+                const circumference = 2 * Math.PI * 26;
+                const strokeDasharray = `${accuracy * circumference / 100} ${circumference}`;
+                document.getElementById('accuracy-ring').style.strokeDasharray = strokeDasharray;
+            }
+            
+            updateErrorDisplay() {
+                const displayMode = document.getElementById('error-display-select').value;
+                const errorDetailsSection = document.getElementById('error-details-section');
+                const acceptAllBtn = document.getElementById('accept-all-btn');
+                
+                if (displayMode === 'list' || displayMode === 'both') {
+                    errorDetailsSection.classList.remove('hidden');
+                    this.populateErrorDetails();
+                } else {
+                    errorDetailsSection.classList.add('hidden');
+                }
+                
+                if (this.errors.length > 0 && this.correctedText) {
+                    acceptAllBtn.classList.remove('hidden');
+                }
+            }
+            
+            populateErrorDetails() {
+                const errorDetailsList = document.getElementById('error-details-list');
+                
+                if (this.errors.length === 0) {
+                    errorDetailsList.innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            <i class="fas fa-check-circle text-4xl mb-4 text-green-400"></i>
+                            <p>No errors found! Your text looks great.</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                errorDetailsList.innerHTML = this.errors.map((error, index) => `
+                    <div class="correction-item">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center mb-2">
+                                    <span class="error-type-badge error-${error.type.toLowerCase()}">${error.type}</span>
+                                    <span class="ml-2 text-xs text-gray-400">Position ${error.start}-${error.end}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <span class="text-gray-300">Original: </span>
+                                    <span class="correction-original">${error.original}</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-300">Suggested: </span>
+                                    <span class="correction-suggested">${error.suggestion}</span>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2 ml-4">
+                                <button class="apply-correction-btn px-3 py-1 text-xs bg-green-500 bg-opacity-20 text-green-300 rounded hover:bg-opacity-30 transition-colors"
+                                        data-error-id="${error.id}">
+                                    Apply
+                                </button>
+                                <button class="ignore-correction-btn px-3 py-1 text-xs bg-gray-500 bg-opacity-20 text-gray-300 rounded hover:bg-opacity-30 transition-colors"
+                                        data-error-id="${error.id}">
+                                    Ignore
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                
+                // Add event listeners to correction buttons
+                document.querySelectorAll('.apply-correction-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const errorId = parseInt(e.target.getAttribute('data-error-id'));
+                        this.applyCorrection(errorId);
+                    });
+                });
+                
+                document.querySelectorAll('.ignore-correction-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const errorId = parseInt(e.target.getAttribute('data-error-id'));
+                        this.ignoreCorrection(errorId);
+                    });
+                });
+            }
+            
+            applyCorrection(errorId) {
+                const error = this.errors.find(e => e.id === errorId);
+                if (!error) return;
+                
+                // Apply the correction to the text
+                const beforeText = this.correctedText.substring(0, error.start);
+                const afterText = this.correctedText.substring(error.end);
+                this.correctedText = beforeText + error.suggestion + afterText;
+                
+                // Update the display
+                document.getElementById('proofread-output').innerHTML = this.highlightErrors(this.correctedText);
+                
+                // Remove the error from the list
+                this.errors = this.errors.filter(e => e.id !== errorId);
+                
+                // Update displays
+                this.analyzeErrors();
+                this.updateErrorDisplay();
+            }
+            
+            ignoreCorrection(errorId) {
+                // Remove the error from the list without applying
+                this.errors = this.errors.filter(e => e.id !== errorId);
+                
+                // Update displays
+                this.analyzeErrors();
+                this.updateErrorDisplay();
+                
+                // Remove highlight from the output
+                document.getElementById('proofread-output').innerHTML = this.highlightErrors(this.correctedText);
+            }
+            
+            acceptAllCorrections() {
+                // Apply all remaining corrections
+                this.errors.forEach(error => {
+                    this.applyCorrection(error.id);
+                });
+                
+                this.showNotification('All corrections have been applied', 'success');
+            }
+            
+            enableProofreadActions() {
+                document.getElementById('copy-corrected-btn').disabled = false;
+                document.getElementById('export-report-btn').disabled = false;
+                document.getElementById('regenerate-btn').disabled = false;
+            }
+            
+            stopProofread() {
+                if (this.currentController) {
+                    this.currentController.abort();
+                }
+            }
+            
+            regenerateProofread() {
+                this.proofreadText();
+            }
+            
+            clearAll() {
+                document.getElementById('input-text').value = '';
+                document.getElementById('proofread-output').innerHTML = '';
+                document.getElementById('proofread-placeholder').style.display = 'flex';
+                document.getElementById('proofread-info').textContent = '';
+                document.getElementById('error-details-section').classList.add('hidden');
+                document.getElementById('accept-all-btn').classList.add('hidden');
+                
+                // Reset error counters
+                document.getElementById('total-errors').textContent = '0';
+                document.getElementById('grammar-errors').textContent = '0';
+                document.getElementById('spelling-errors').textContent = '0';
+                document.getElementById('punctuation-errors').textContent = '0';
+                document.getElementById('style-errors').textContent = '0';
+                document.getElementById('accuracy-score').textContent = '100%';
+                document.getElementById('accuracy-percent').textContent = '100';
+                document.getElementById('processing-time').textContent = '-';
+                
+                // Reset accuracy ring
+                document.getElementById('accuracy-ring').style.strokeDasharray = '188 188';
+                
+                this.inputText = '';
+                this.correctedText = '';
+                this.errors = [];
+                this.apiCorrections = [];
+                
+                document.getElementById('copy-corrected-btn').disabled = true;
+                document.getElementById('export-report-btn').disabled = true;
+                document.getElementById('regenerate-btn').disabled = true;
+                
+                this.updateCharCount();
+                this.updateProofreadButton();
+            }
+            
+            async copyCorrected() {
+                try {
+                    await navigator.clipboard.writeText(this.correctedText);
+                    this.showNotification('Corrected text copied to clipboard', 'success');
+                } catch (error) {
+                    console.error('Failed to copy corrected text:', error);
+                    this.showNotification('Failed to copy text', 'error');
+                }
+            }
+            
+            exportReport() {
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                
+                const report = `PROOFREADING REPORT
+Generated on: ${new Date().toLocaleString()}
+
+ORIGINAL TEXT:
+${this.inputText}
+
+CORRECTED TEXT:
+${this.correctedText}
+
+ERROR SUMMARY:
+- Total Errors: ${this.errors.length}
+- Grammar: ${this.errors.filter(e => e.type === 'Grammar').length}
+- Spelling: ${this.errors.filter(e => e.type === 'Spelling').length}
+- Punctuation: ${this.errors.filter(e => e.type === 'Punctuation').length}
+- Style: ${this.errors.filter(e => e.type === 'Style').length}
+
+DETAILED ERRORS:
+${this.errors.map((error, index) => 
+    `${index + 1}. ${error.type} Error at position ${error.start}-${error.end}
+   Original: "${error.original}"
+   Suggestion: "${error.suggestion}"`
+).join('\n')}`;
+
+                const blob = new Blob([report], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `proofreading-report-${timestamp}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Proofreading report exported successfully', 'success');
+            }
+            
+            updateUI() {
+                const proofreadBtn = document.getElementById('proofread-btn');
+                const proofreadBtnText = document.getElementById('proofread-btn-text');
+                const stopProofreadBtn = document.getElementById('stop-proofread-btn');
+                
+                if (this.isProofreading) {
+                    proofreadBtnText.textContent = 'Proofreading...';
+                    proofreadBtn.classList.add('hidden');
+                    stopProofreadBtn.classList.remove('hidden');
+                } else {
+                    proofreadBtnText.textContent = 'Proofread Text';
+                    proofreadBtn.classList.remove('hidden');
+                    stopProofreadBtn.classList.add('hidden');
+                }
+                
+                this.updateProofreadButton();
+            }
+            
+            showError(message) {
+                const output = document.getElementById('proofread-output');
+                const loading = document.getElementById('proofread-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                // Add null checks to prevent errors
+                if (loading) loading.classList.add('hidden');
+                if (cursor) cursor.classList.add('hidden');
+                if (output) output.innerHTML = `<div class="text-red-300"><i class="fas fa-exclamation-triangle mr-2"></i>${message}</div>`;
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new ProofreaderApp();
+        });
+    </script>
+</body>
+</html>

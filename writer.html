@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writer API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .writing-output {
+            min-height: 400px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .prompt-template {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .prompt-template:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .tone-selector {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tone-selector:hover {
+            transform: translateY(-2px);
+        }
+
+        .tone-selector.selected {
+            border: 2px solid #06b6d4;
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .streaming-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #06b6d4;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .word-count-ring {
+            position: relative;
+        }
+
+        .word-count-ring svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-ring {
+            fill: transparent;
+            stroke: #374151;
+            stroke-width: 4;
+        }
+
+        .progress-ring-progress {
+            fill: transparent;
+            stroke: #06b6d4;
+            stroke-width: 4;
+            stroke-dasharray: 0 100;
+            transition: stroke-dasharray 0.3s;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-pen-fancy text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Writer API</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Content Generation Service</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Writer API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <!-- Main Writing Interface -->
+                <div class="lg:col-span-3 space-y-6">
+                    
+                    <!-- Writing Settings -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-cog text-cyan-300 mr-3"></i>
+                            Writing Settings
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Tone</label>
+                                <select id="tone-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="neutral" selected>Neutral</option>
+                                    <option value="formal">Formal</option>
+                                    <option value="casual">Casual</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Length</label>
+                                <select id="length-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="short" selected>Short</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="long">Long</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Format</label>
+                                <select id="format-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="markdown" selected>Markdown</option>
+                                    <option value="plain-text">Plain Text</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Mode</label>
+                                <select id="mode-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="batch">Complete</option>
+                                    <option value="streaming" selected>Streaming</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-200 mb-2">Shared Context (Optional)</label>
+                            <input type="text" id="shared-context" 
+                                   class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                                   placeholder="e.g., 'This is for a business blog targeting entrepreneurs'">
+                        </div>
+                    </div>
+
+                    <!-- Writing Input -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                            <i class="fas fa-lightbulb text-yellow-300 mr-3"></i>
+                            Writing Prompt
+                        </h3>
+                        
+                        <textarea 
+                            id="writing-prompt" 
+                            class="w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-vertical"
+                            placeholder="Describe what you want to write about..."
+                            rows="4"
+                        ></textarea>
+
+                        <div class="mt-4">
+                            <label class="block text-sm font-medium text-gray-200 mb-2">Additional Context (Optional)</label>
+                            <input type="text" id="additional-context" 
+                                   class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                                   placeholder="Any additional context for this specific writing task">
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400">
+                                <span id="prompt-char-count">0</span> characters
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="clear-prompt-btn" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
+                                    <i class="fas fa-trash mr-1"></i> Clear
+                                </button>
+                                <button id="write-btn" class="bg-gradient-to-r from-cyan-500 to-blue-500 text-white px-8 py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="fas fa-pen-fancy mr-2"></i>
+                                    <span id="write-btn-text">Generate Content</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Writing Output -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-file-alt text-cyan-300 mr-3"></i>
+                                Generated Content
+                            </h3>
+                            <div class="flex items-center space-x-4">
+                                <div id="word-count-display" class="hidden word-count-ring">
+                                    <svg width="40" height="40" class="transform -rotate-90">
+                                        <circle cx="20" cy="20" r="16" class="progress-ring"></circle>
+                                        <circle cx="20" cy="20" r="16" class="progress-ring-progress" id="word-count-circle"></circle>
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center">
+                                        <span id="word-count-number" class="text-xs font-semibold text-cyan-300">0</span>
+                                    </div>
+                                </div>
+                                <button id="stop-writing-btn" class="hidden bg-red-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
+                                    <i class="fas fa-stop mr-2"></i>Stop
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="writing-output relative bg-gray-900 bg-opacity-50 border border-gray-600 rounded-lg p-4">
+                            <div id="writing-output" class="text-white">
+                                <span id="streaming-cursor" class="streaming-cursor hidden"></span>
+                            </div>
+                            <div id="writing-placeholder" class="text-gray-500 flex items-center justify-center h-full">
+                                <div class="text-center">
+                                    <i class="fas fa-pen-fancy text-4xl mb-4 opacity-50"></i>
+                                    <p>Generated content will appear here...</p>
+                                </div>
+                            </div>
+                            <div id="writing-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 rounded-lg">
+                                <div class="flex items-center space-x-2">
+                                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-300"></div>
+                                    <span class="text-cyan-300">Generating content...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400" id="generation-info">
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="copy-content-btn" class="px-4 py-2 text-sm text-green-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-copy mr-1"></i> Copy
+                                </button>
+                                <button id="export-content-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-download mr-1"></i> Export
+                                </button>
+                                <button id="regenerate-btn" class="px-4 py-2 text-sm text-purple-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-redo mr-1"></i> Regenerate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="lg:col-span-1 space-y-6">
+                    
+                    <!-- Prompt Templates -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-templates text-purple-300 mr-2"></i>
+                            Quick Templates
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Write a professional email to a client about project updates"
+                                 data-context="Business communication requiring professional tone">
+                                <div class="text-sm font-medium text-white mb-1">Business Email</div>
+                                <div class="text-xs text-gray-300">Professional client communication</div>
+                            </div>
+
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Create a blog post introduction about sustainable living tips"
+                                 data-context="Environmental blog targeting eco-conscious readers">
+                                <div class="text-sm font-medium text-white mb-1">Blog Introduction</div>
+                                <div class="text-xs text-gray-300">Engaging blog post opening</div>
+                            </div>
+
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Write a product description for an innovative smartphone"
+                                 data-context="E-commerce product page for tech-savvy customers">
+                                <div class="text-sm font-medium text-white mb-1">Product Description</div>
+                                <div class="text-xs text-gray-300">Compelling product copy</div>
+                            </div>
+
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Create a social media post about a new coffee shop opening"
+                                 data-context="Social media marketing for local business">
+                                <div class="text-sm font-medium text-white mb-1">Social Media</div>
+                                <div class="text-xs text-gray-300">Engaging social content</div>
+                            </div>
+
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Write a technical documentation introduction for an API"
+                                 data-context="Developer documentation requiring clear explanations">
+                                <div class="text-sm font-medium text-white mb-1">Technical Docs</div>
+                                <div class="text-xs text-gray-300">Clear technical writing</div>
+                            </div>
+
+                            <div class="prompt-template glass-morphism rounded-lg p-3"
+                                 data-prompt="Create a creative story opening about time travel"
+                                 data-context="Creative fiction writing with imaginative elements">
+                                <div class="text-sm font-medium text-white mb-1">Creative Story</div>
+                                <div class="text-xs text-gray-300">Imaginative fiction writing</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Writing Stats -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-chart-line text-green-300 mr-2"></i>
+                            Writing Stats
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Words Generated</span>
+                                <span id="total-words" class="text-sm font-semibold text-cyan-300">0</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Characters</span>
+                                <span id="total-chars" class="text-sm font-semibold text-cyan-300">0</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Generation Time</span>
+                                <span id="generation-time" class="text-sm font-semibold text-cyan-300">-</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Current Tone</span>
+                                <span id="current-tone" class="text-sm font-semibold text-cyan-300">Neutral</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tips -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-lightbulb text-yellow-300 mr-2"></i>
+                            Writing Tips
+                        </h3>
+                        
+                        <ul class="space-y-3 text-xs text-gray-300">
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-cyan-300 mr-2 mt-1"></i>
+                                <span>Be specific in your prompts for better results</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-cyan-300 mr-2 mt-1"></i>
+                                <span>Use shared context for consistent style</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-cyan-300 mr-2 mt-1"></i>
+                                <span>Try different tones for various audiences</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-cyan-300 mr-2 mt-1"></i>
+                                <span>Streaming mode shows real-time generation</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class WriterApp {
+            constructor() {
+                this.writer = null;
+                this.isWriting = false;
+                this.currentController = null;
+                this.writingStats = {
+                    totalWords: 0,
+                    totalChars: 0,
+                    generationTime: 0
+                };
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.updateUI();
+                this.loadStats();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    if (!('Writer' in self)) {
+                        throw new Error('Writer API not supported');
+                    }
+                    
+                    const availability = await Writer.availability();
+                    
+                    if (availability === 'unavailable') {
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Writer API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                } catch (error) {
+                    console.error('Writer API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Writer API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            setupEventListeners() {
+                const writingPrompt = document.getElementById('writing-prompt');
+                const writeBtn = document.getElementById('write-btn');
+                const clearPromptBtn = document.getElementById('clear-prompt-btn');
+                const copyContentBtn = document.getElementById('copy-content-btn');
+                const exportContentBtn = document.getElementById('export-content-btn');
+                const regenerateBtn = document.getElementById('regenerate-btn');
+                const stopWritingBtn = document.getElementById('stop-writing-btn');
+                
+                // Input events
+                writingPrompt.addEventListener('input', () => {
+                    this.updatePromptCharCount();
+                    this.updateWriteButton();
+                });
+                
+                // Button events
+                writeBtn.addEventListener('click', () => this.generateContent());
+                clearPromptBtn.addEventListener('click', () => this.clearAll());
+                copyContentBtn.addEventListener('click', () => this.copyContent());
+                exportContentBtn.addEventListener('click', () => this.exportContent());
+                regenerateBtn.addEventListener('click', () => this.regenerateContent());
+                stopWritingBtn.addEventListener('click', () => this.stopGeneration());
+                
+                // Settings events
+                document.getElementById('tone-select').addEventListener('change', (e) => {
+                    document.getElementById('current-tone').textContent = 
+                        e.target.options[e.target.selectedIndex].text;
+                });
+                
+                // Template events
+                document.querySelectorAll('.prompt-template').forEach(template => {
+                    template.addEventListener('click', () => {
+                        const prompt = template.getAttribute('data-prompt');
+                        const context = template.getAttribute('data-context');
+                        
+                        writingPrompt.value = prompt;
+                        document.getElementById('shared-context').value = context;
+                        
+                        this.updatePromptCharCount();
+                        this.updateWriteButton();
+                    });
+                });
+            }
+            
+            updatePromptCharCount() {
+                const writingPrompt = document.getElementById('writing-prompt');
+                const charCount = document.getElementById('prompt-char-count');
+                charCount.textContent = writingPrompt.value.length;
+            }
+            
+            updateWriteButton() {
+                const writingPrompt = document.getElementById('writing-prompt');
+                const writeBtn = document.getElementById('write-btn');
+                
+                const hasPrompt = writingPrompt.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                
+                writeBtn.disabled = !(hasPrompt && apiAvailable && !this.isWriting);
+            }
+            
+            async createWriter() {
+                const tone = document.getElementById('tone-select').value;
+                const length = document.getElementById('length-select').value;
+                const format = document.getElementById('format-select').value;
+                const sharedContext = document.getElementById('shared-context').value.trim();
+                
+                const options = {
+                    tone: tone,
+                    length: length,
+                    format: format,
+                    monitor(m) {
+                        m.addEventListener('downloadprogress', (e) => {
+                            console.log(`Downloaded ${e.loaded * 100}%`);
+                        });
+                    }
+                };
+                
+                if (sharedContext) {
+                    options.sharedContext = sharedContext;
+                }
+                
+                return await Writer.create(options);
+            }
+            
+            async generateContent() {
+                if (this.isWriting) return;
+                
+                const prompt = document.getElementById('writing-prompt').value.trim();
+                if (!prompt) return;
+                
+                this.isWriting = true;
+                this.currentController = new AbortController();
+                
+                try {
+                    // Create writer with current settings
+                    this.writer = await this.createWriter();
+                    
+                    // Prepare UI
+                    this.prepareOutput();
+                    
+                    const mode = document.getElementById('mode-select').value;
+                    const additionalContext = document.getElementById('additional-context').value.trim();
+                    const contextObj = additionalContext ? { context: additionalContext } : {};
+                    
+                    const startTime = performance.now();
+                    
+                    if (mode === 'streaming') {
+                        await this.streamingWrite(prompt, contextObj);
+                    } else {
+                        await this.batchWrite(prompt, contextObj);
+                    }
+                    
+                    const endTime = performance.now();
+                    const generationTime = Math.round(endTime - startTime);
+                    this.writingStats.generationTime = generationTime;
+                    
+                    this.updateStats();
+                    this.displayGenerationInfo(generationTime);
+                    this.enableContentActions();
+                    
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Content generation failed:', error);
+                        this.showError('Content generation failed: ' + error.message);
+                    }
+                } finally {
+                    this.isWriting = false;
+                    this.currentController = null;
+                    this.updateUI();
+                }
+            }
+            
+            async streamingWrite(prompt, contextObj) {
+                const output = document.getElementById('writing-output');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                cursor.classList.remove('hidden');
+                
+                const stream = this.writer.writeStreaming(prompt, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                let wordCount = 0;
+                for await (const chunk of stream) {
+                    output.textContent += chunk;
+                    
+                    // Update word count in real-time
+                    const words = chunk.trim() ? chunk.trim().split(/\s+/).length : 0;
+                    if (words !== wordCount) {
+                        wordCount = words;
+                        this.updateWordCountDisplay(words);
+                    }
+                }
+                
+                cursor.classList.add('hidden');
+            }
+            
+            async batchWrite(prompt, contextObj) {
+                const output = document.getElementById('writing-output');
+                const loading = document.getElementById('writing-loading');
+                
+                loading.classList.remove('hidden');
+                
+                const result = await this.writer.write(prompt, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                loading.classList.add('hidden');
+                output.textContent = result;
+                
+                const words = result.trim() ? result.trim().split(/\s+/).length : 0;
+                this.updateWordCountDisplay(words);
+            }
+            
+            updateWordCountDisplay(words) {
+                const wordCountNumber = document.getElementById('word-count-number');
+                const wordCountDisplay = document.getElementById('word-count-display');
+                const wordCountCircle = document.getElementById('word-count-circle');
+                
+                wordCountNumber.textContent = words;
+                wordCountDisplay.classList.remove('hidden');
+                
+                // Animate progress circle (assuming max 500 words for visualization)
+                const maxWords = 500;
+                const progress = Math.min(words / maxWords, 1) * 100;
+                const circumference = 2 * Math.PI * 16;
+                const strokeDasharray = `${progress * circumference / 100} ${circumference}`;
+                wordCountCircle.style.strokeDasharray = strokeDasharray;
+            }
+            
+            prepareOutput() {
+                const output = document.getElementById('writing-output');
+                const placeholder = document.getElementById('writing-placeholder');
+                const loading = document.getElementById('writing-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                placeholder.style.display = 'none';
+                output.textContent = '';
+                loading.classList.add('hidden');
+                cursor.classList.add('hidden');
+                
+                this.updateUI();
+            }
+            
+            displayGenerationInfo(processingTime) {
+                const info = document.getElementById('generation-info');
+                const outputText = document.getElementById('writing-output').textContent;
+                const wordCount = outputText.trim() ? outputText.trim().split(/\s+/).length : 0;
+                const charCount = outputText.length;
+                
+                info.textContent = `${wordCount} words, ${charCount} characters • Generated in ${processingTime}ms`;
+            }
+            
+            updateStats() {
+                const outputText = document.getElementById('writing-output').textContent;
+                const words = outputText.trim() ? outputText.trim().split(/\s+/).length : 0;
+                
+                this.writingStats.totalWords = words;
+                this.writingStats.totalChars = outputText.length;
+                
+                document.getElementById('total-words').textContent = this.writingStats.totalWords;
+                document.getElementById('total-chars').textContent = this.writingStats.totalChars;
+                document.getElementById('generation-time').textContent = 
+                    this.writingStats.generationTime ? `${this.writingStats.generationTime}ms` : '-';
+                
+                this.saveStats();
+            }
+            
+            loadStats() {
+                const saved = localStorage.getItem('writer-api-stats');
+                if (saved) {
+                    this.writingStats = { ...this.writingStats, ...JSON.parse(saved) };
+                    this.updateStatsDisplay();
+                }
+            }
+            
+            saveStats() {
+                localStorage.setItem('writer-api-stats', JSON.stringify(this.writingStats));
+            }
+            
+            updateStatsDisplay() {
+                document.getElementById('total-words').textContent = this.writingStats.totalWords;
+                document.getElementById('total-chars').textContent = this.writingStats.totalChars;
+                document.getElementById('generation-time').textContent = 
+                    this.writingStats.generationTime ? `${this.writingStats.generationTime}ms` : '-';
+            }
+            
+            enableContentActions() {
+                document.getElementById('copy-content-btn').disabled = false;
+                document.getElementById('export-content-btn').disabled = false;
+                document.getElementById('regenerate-btn').disabled = false;
+            }
+            
+            stopGeneration() {
+                if (this.currentController) {
+                    this.currentController.abort();
+                }
+            }
+            
+            regenerateContent() {
+                this.generateContent();
+            }
+            
+            clearAll() {
+                document.getElementById('writing-prompt').value = '';
+                document.getElementById('additional-context').value = '';
+                document.getElementById('writing-output').textContent = '';
+                document.getElementById('writing-placeholder').style.display = 'flex';
+                document.getElementById('generation-info').textContent = '';
+                document.getElementById('word-count-display').classList.add('hidden');
+                document.getElementById('copy-content-btn').disabled = true;
+                document.getElementById('export-content-btn').disabled = true;
+                document.getElementById('regenerate-btn').disabled = true;
+                
+                this.updatePromptCharCount();
+                this.updateWriteButton();
+            }
+            
+            async copyContent() {
+                const output = document.getElementById('writing-output');
+                try {
+                    await navigator.clipboard.writeText(output.textContent);
+                    this.showNotification('Content copied to clipboard', 'success');
+                } catch (error) {
+                    console.error('Failed to copy content:', error);
+                    this.showNotification('Failed to copy content', 'error');
+                }
+            }
+            
+            exportContent() {
+                const output = document.getElementById('writing-output');
+                const content = output.textContent;
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const tone = document.getElementById('tone-select').value;
+                
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `generated-content-${tone}-${timestamp}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Content exported successfully', 'success');
+            }
+            
+            updateUI() {
+                const writeBtn = document.getElementById('write-btn');
+                const writeBtnText = document.getElementById('write-btn-text');
+                const stopWritingBtn = document.getElementById('stop-writing-btn');
+                
+                if (this.isWriting) {
+                    writeBtnText.textContent = 'Generating...';
+                    writeBtn.classList.add('hidden');
+                    stopWritingBtn.classList.remove('hidden');
+                } else {
+                    writeBtnText.textContent = 'Generate Content';
+                    writeBtn.classList.remove('hidden');
+                    stopWritingBtn.classList.add('hidden');
+                }
+                
+                this.updateWriteButton();
+            }
+            
+            showError(message) {
+                const output = document.getElementById('writing-output');
+                const loading = document.getElementById('writing-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                loading.classList.add('hidden');
+                cursor.classList.add('hidden');
+                output.innerHTML = `<div class="text-red-300"><i class="fas fa-exclamation-triangle mr-2"></i>${message}</div>`;
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new WriterApp();
+        });
+    </script>
+</body>
+</html>

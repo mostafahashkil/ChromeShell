@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrome AI APIs Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .api-test {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #ccc;
+        }
+        .available { border-left-color: #4CAF50; }
+        .unavailable { border-left-color: #f44336; }
+        .loading { border-left-color: #ff9800; }
+        .status {
+            font-weight: bold;
+            float: right;
+        }
+        .available .status { color: #4CAF50; }
+        .unavailable .status { color: #f44336; }
+        .loading .status { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <h1>🤖 Chrome Built-in AI APIs Test</h1>
+    <p>This page will test which Chrome Built-in AI APIs are available in your browser.</p>
+    
+    <div id="browser-info">
+        <h2>Browser Information</h2>
+        <p><strong>User Agent:</strong> <span id="userAgent"></span></p>
+        <p><strong>Browser:</strong> <span id="browserName"></span></p>
+    </div>
+
+    <div id="api-tests">
+        <h2>API Availability Tests</h2>
+        
+        <div id="translator-test" class="api-test loading">
+            <h3>Translator API</h3>
+            <span class="status">Testing...</span>
+            <p>Enables translation between languages</p>
+        </div>
+
+        <div id="languagemodel-test" class="api-test loading">
+            <h3>Language Model API (Gemini Nano)</h3>
+            <span class="status">Testing...</span>
+            <p>Powers conversational AI and language detection</p>
+        </div>
+
+        <div id="summarizer-test ...." class="api-test loading">
+            <h3>Summarizer API</h3>
+            <span class="status">Testing...</span>
+            <p>Generates text summaries</p>
+        </div>
+
+        <div id="writer-test" class="api-test loading">
+            <h3>Writer API</h3>
+            <span class="status">Testing...</span>
+            <p>Generates content with various tones</p>
+        </div>
+
+        <div id="rewriter-test" class="api-test loading">
+            <h3>Rewriter API</h3>
+            <span class="status">Testing...</span>
+            <p>Transforms text style and tone</p>
+        </div>
+
+        <div id="proofreader-test" class="api-test loading">
+            <h3>Proofreader API</h3>
+            <span class="status">Testing...</span>
+            <p>Checks grammar and spelling</p>
+        </div>
+    </div>
+
+    <div id="instructions" style="margin-top: 30px; padding: 20px; background: #e3f2fd; border-radius: 8px;">
+        <h2>📋 If APIs are Unavailable:</h2>
+        <ol>
+            <li><strong>Use Chrome Canary:</strong> Download from <a href="https://www.google.com/chrome/canary/" target="_blank">chrome://canary</a></li>
+            <li><strong>Enable Flags:</strong> Go to <code>chrome://flags/</code> and enable:
+                <ul>
+                    <li><code>#optimization-guide-on-device-model</code></li>
+                    <li><code>#prompt-api-for-gemini-nano</code></li>
+                    <li><code>#summarization-api-for-gemini-nano</code></li>
+                    <li><code>#writer-api-for-gemini-nano</code></li>
+                    <li><code>#rewriter-api-for-gemini-nano</code></li>
+                    <li><code>#translation-api</code></li>
+                    <li><code>#language-detection-api</code></li>
+                </ul>
+            </li>
+            <li><strong>Restart Browser:</strong> Completely close and reopen Chrome Canary</li>
+            <li><strong>Wait for Download:</strong> Some APIs need to download models on first use</li>
+        </ol>
+    </div>
+
+    <script>
+        // Display browser info
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        
+        const isChrome = navigator.userAgent.includes('Chrome');
+        const isCanary = navigator.userAgent.includes('Chrome') && (
+            navigator.userAgent.includes('Canary') || 
+            navigator.userAgent.includes('Dev') ||
+            navigator.userAgent.includes('Beta')
+        );
+        
+        document.getElementById('browserName').textContent = isCanary ? 'Chrome Canary/Dev/Beta' : 
+                                                          isChrome ? 'Chrome Stable' : 'Other Browser';
+
+        // Test each API
+        async function testAPI(apiName, testId, checkFunction) {
+            const testElement = document.getElementById(testId);
+            const statusElement = testElement.querySelector('.status');
+            
+            try {
+                const result = await checkFunction();
+                if (result) {
+                    testElement.className = 'api-test available';
+                    statusElement.textContent = '✅ Available';
+                } else {
+                    testElement.className = 'api-test unavailable';
+                    statusElement.textContent = '❌ Unavailable';
+                }
+            } catch (error) {
+                testElement.className = 'api-test unavailable';
+                statusElement.textContent = '❌ Not Supported';
+                console.log(`${apiName} error:`, error);
+            }
+        }
+
+        // API test functions
+        async function testTranslator() {
+            if (!('Translator' in self)) return false;
+            const availability = await self.Translator.availability({ 
+                sourceLanguage: 'en', 
+                targetLanguage: 'es' 
+            });
+            console.log('Translator availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        async function testLanguageModel() {
+            if (!('LanguageModel' in self)) return false;
+            const availability = await self.LanguageModel.availability();
+            console.log('LanguageModel availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        async function testSummarizer() {
+            if (!('Summarizer' in self)) return false;
+            const availability = await self.Summarizer.availability();
+            console.log('Summarizer availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        async function testWriter() {
+            if (!('Writer' in self)) return false;
+            const availability = await self.Writer.availability();
+            console.log('Writer availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        async function testRewriter() {
+            if (!('Rewriter' in self)) return false;
+            const availability = await self.Rewriter.availability();
+            console.log('Rewriter availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        async function testProofreader() {
+            if (!('Proofreader' in self)) return false;
+            const availability = await self.Proofreader.availability();
+            console.log('Proofreader availability:', availability);
+            return availability === 'readily' || availability === 'after-download';
+        }
+
+        // Run all tests
+        async function runTests() {
+            console.log('🔍 Testing Chrome Built-in AI APIs...');
+            
+            await Promise.all([
+                testAPI('Translator', 'translator-test', testTranslator),
+                testAPI('Language Model', 'languagemodel-test', testLanguageModel),
+                testAPI('Summarizer', 'summarizer-test', testSummarizer),
+                testAPI('Writer', 'writer-test', testWriter),
+                testAPI('Rewriter', 'rewriter-test', testRewriter),
+                testAPI('Proofreader', 'proofreader-test', testProofreader)
+            ]);
+            
+            console.log('✅ API tests completed');
+        }
+
+        // Start tests when page loads
+        document.addEventListener('DOMContentLoaded', runTests);
+    </script>
+</body>
+</html>

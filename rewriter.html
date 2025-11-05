@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rewriter API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .rewrite-output {
+            min-height: 400px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .sample-template {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sample-template:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .tone-selector {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .tone-selector:hover {
+            transform: translateY(-2px);
+        }
+
+        .tone-selector.selected {
+            border: 2px solid #06b6d4;
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        .streaming-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #06b6d4;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .diff-highlight {
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin: 0 1px;
+        }
+
+        .diff-added {
+            background-color: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .diff-removed {
+            background-color: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            text-decoration: line-through;
+        }
+
+        .comparison-side {
+            height: 400px;
+            overflow-y: auto;
+        }
+
+        .word-count-bar {
+            width: 100%;
+            height: 4px;
+            background: #374151;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .word-count-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #06b6d4, #3b82f6);
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-edit text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Rewriter API</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Text Rewriting Service</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Rewriter API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <!-- Main Rewriting Interface -->
+                <div class="lg:col-span-3 space-y-6">
+                    
+                    <!-- Rewrite Settings -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-cog text-purple-300 mr-3"></i>
+                            Rewrite Settings
+                        </h3>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Tone</label>
+                                <select id="tone-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="as-is" selected>As-is</option>
+                                    <option value="more-formal">More Formal</option>
+                                    <option value="more-casual">More Casual</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Length</label>
+                                <select id="length-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="as-is" selected>As-is</option>
+                                    <option value="shorter">Shorter</option>
+                                    <option value="longer">Longer</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Format</label>
+                                <select id="format-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="markdown" selected>Markdown</option>
+                                    <option value="plain-text">Plain Text</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-200 mb-2">Mode</label>
+                                <select id="mode-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                                    <option value="batch">Complete</option>
+                                    <option value="streaming" selected>Streaming</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-200 mb-2">Shared Context (Optional)</label>
+                            <input type="text" id="shared-context" 
+                                   class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                                   placeholder="e.g., 'Academic paper context' or 'Marketing copy style'">
+                        </div>
+                    </div>
+
+                    <!-- Input Text -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                            <i class="fas fa-file-text text-blue-300 mr-3"></i>
+                            Original Text
+                        </h3>
+                        
+                        <textarea 
+                            id="original-text" 
+                            class="w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400 resize-vertical"
+                            placeholder="Enter the text you want to rewrite..."
+                            rows="6"
+                        ></textarea>
+
+                        <div class="mt-4">
+                            <label class="block text-sm font-medium text-gray-200 mb-2">Additional Context (Optional)</label>
+                            <input type="text" id="additional-context" 
+                                   class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                                   placeholder="Specific instructions for this rewrite">
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400">
+                                <span id="original-char-count">0</span> characters • 
+                                <span id="original-word-count">0</span> words
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="clear-text-btn" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
+                                    <i class="fas fa-trash mr-1"></i> Clear
+                                </button>
+                                <button id="rewrite-btn" class="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                    <i class="fas fa-magic mr-2"></i>
+                                    <span id="rewrite-btn-text">Rewrite Text</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comparison View -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-columns text-purple-300 mr-3"></i>
+                                Comparison View
+                            </h3>
+                            <div class="flex items-center space-x-4">
+                                <button id="toggle-diff-btn" class="px-4 py-2 text-sm bg-gray-600 bg-opacity-50 rounded-lg hover:bg-opacity-70 transition-colors">
+                                    <i class="fas fa-eye mr-1"></i> Show Differences
+                                </button>
+                                <button id="stop-rewrite-btn" class="hidden bg-red-500 text-white px-4 py-2 rounded-lg hover:shadow-lg transition-all">
+                                    <i class="fas fa-stop mr-2"></i>Stop
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Original Text Display -->
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-sm font-medium text-gray-300">Original</h4>
+                                    <div class="text-xs text-gray-400">
+                                        <span id="original-display-words">0</span> words
+                                    </div>
+                                </div>
+                                <div class="comparison-side bg-gray-900 bg-opacity-50 border border-gray-600 rounded-lg p-4">
+                                    <div id="original-display" class="text-white">
+                                        <div class="text-gray-500 flex items-center justify-center h-full">
+                                            <div class="text-center">
+                                                <i class="fas fa-file-text text-4xl mb-4 opacity-50"></i>
+                                                <p>Original text will appear here...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Rewritten Text Display -->
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <h4 class="text-sm font-medium text-gray-300">Rewritten</h4>
+                                    <div class="text-xs text-gray-400">
+                                        <span id="rewritten-display-words">0</span> words
+                                    </div>
+                                </div>
+                                <div class="comparison-side bg-gray-900 bg-opacity-50 border border-gray-600 rounded-lg p-4 relative">
+                                    <div id="rewritten-display" class="text-white">
+                                        <span id="streaming-cursor" class="streaming-cursor hidden"></span>
+                                    </div>
+                                    <div id="rewrite-placeholder" class="text-gray-500 flex items-center justify-center h-full">
+                                        <div class="text-center">
+                                            <i class="fas fa-magic text-4xl mb-4 opacity-50"></i>
+                                            <p>Rewritten text will appear here...</p>
+                                        </div>
+                                    </div>
+                                    <div id="rewrite-loading" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 rounded-lg">
+                                        <div class="flex items-center space-x-2">
+                                            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-300"></div>
+                                            <span class="text-purple-300">Rewriting text...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400" id="rewrite-info">
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="copy-rewritten-btn" class="px-4 py-2 text-sm text-green-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-copy mr-1"></i> Copy Rewritten
+                                </button>
+                                <button id="export-comparison-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-download mr-1"></i> Export Both
+                                </button>
+                                <button id="regenerate-btn" class="px-4 py-2 text-sm text-purple-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-redo mr-1"></i> Regenerate
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="lg:col-span-1 space-y-6">
+                    
+                    <!-- Sample Texts -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-clipboard-list text-blue-300 mr-2"></i>
+                            Sample Texts
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="The weather today is really nice. I think it would be great to go outside and enjoy the sunshine. Maybe we could have a picnic or go for a walk in the park."
+                                 data-context="Casual conversation">
+                                <div class="text-sm font-medium text-white mb-1">Casual Text</div>
+                                <div class="text-xs text-gray-300">Informal, conversational style</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Our quarterly revenue exceeded expectations by 15 percent. The marketing team's strategic initiatives and operational efficiency improvements contributed significantly to this achievement."
+                                 data-context="Business report">
+                                <div class="text-sm font-medium text-white mb-1">Business Text</div>
+                                <div class="text-xs text-gray-300">Professional, formal tone</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Machine learning algorithms have revolutionized data analysis. They enable computers to learn patterns from data without explicit programming, leading to more accurate predictions and insights."
+                                 data-context="Technical documentation">
+                                <div class="text-sm font-medium text-white mb-1">Technical Text</div>
+                                <div class="text-xs text-gray-300">Technical, explanatory content</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Hey everyone! Super excited to announce our new product launch. It's been months of hard work, and we can't wait for you to try it. Check it out and let us know what you think!"
+                                 data-context="Social media post">
+                                <div class="text-sm font-medium text-white mb-1">Social Media</div>
+                                <div class="text-xs text-gray-300">Energetic, engaging content</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Recent studies indicate that sustainable practices significantly impact environmental conservation. Implementation of eco-friendly policies requires systematic evaluation and stakeholder collaboration."
+                                 data-context="Academic paper">
+                                <div class="text-sm font-medium text-white mb-1">Academic Text</div>
+                                <div class="text-xs text-gray-300">Scholarly, research-based</div>
+                            </div>
+
+                            <div class="sample-template glass-morphism rounded-lg p-3"
+                                 data-text="Looking for a reliable smartphone? Our latest model features advanced camera technology, long-lasting battery life, and lightning-fast performance. Perfect for both work and play!"
+                                 data-context="Marketing copy">
+                                <div class="text-sm font-medium text-white mb-1">Marketing Copy</div>
+                                <div class="text-xs text-gray-300">Persuasive, sales-focused</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rewrite Stats -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-chart-bar text-green-300 mr-2"></i>
+                            Rewrite Stats
+                        </h3>
+                        
+                        <div class="space-y-4">
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Characters Changed</span>
+                                <span id="chars-changed" class="text-sm font-semibold text-purple-300">0</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Words Changed</span>
+                                <span id="words-changed" class="text-sm font-semibold text-purple-300">0</span>
+                            </div>
+                            
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <span class="text-sm text-gray-300">Length Change</span>
+                                    <span id="length-change" class="text-sm font-semibold text-purple-300">0%</span>
+                                </div>
+                                <div class="word-count-bar">
+                                    <div id="length-change-bar" class="word-count-progress" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Processing Time</span>
+                                <span id="processing-time" class="text-sm font-semibold text-purple-300">-</span>
+                            </div>
+                            
+                            <div class="flex justify-between items-center">
+                                <span class="text-sm text-gray-300">Current Tone</span>
+                                <span id="current-tone" class="text-sm font-semibold text-purple-300">As-is</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tips -->
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-bold text-white mb-4 flex items-center">
+                            <i class="fas fa-lightbulb text-yellow-300 mr-2"></i>
+                            Rewriting Tips
+                        </h3>
+                        
+                        <ul class="space-y-3 text-xs text-gray-300">
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-purple-300 mr-2 mt-1"></i>
+                                <span>Provide context for better rewriting results</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-purple-300 mr-2 mt-1"></i>
+                                <span>Try different tone settings for varied outputs</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-purple-300 mr-2 mt-1"></i>
+                                <span>Use streaming mode to see real-time changes</span>
+                            </li>
+                            <li class="flex items-start">
+                                <i class="fas fa-arrow-right text-purple-300 mr-2 mt-1"></i>
+                                <span>Compare original and rewritten versions</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class RewriterApp {
+            constructor() {
+                this.rewriter = null;
+                this.isRewriting = false;
+                this.currentController = null;
+                this.showingDiff = false;
+                this.originalText = '';
+                this.rewrittenText = '';
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.updateUI();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    if (!('Rewriter' in self)) {
+                        throw new Error('Rewriter API not supported');
+                    }
+                    
+                    const availability = await Rewriter.availability();
+                    
+                    if (availability === 'unavailable') {
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Rewriter API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                } catch (error) {
+                    console.error('Rewriter API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Rewriter API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            setupEventListeners() {
+                const originalText = document.getElementById('original-text');
+                const rewriteBtn = document.getElementById('rewrite-btn');
+                const clearTextBtn = document.getElementById('clear-text-btn');
+                const copyRewrittenBtn = document.getElementById('copy-rewritten-btn');
+                const exportComparisonBtn = document.getElementById('export-comparison-btn');
+                const regenerateBtn = document.getElementById('regenerate-btn');
+                const stopRewriteBtn = document.getElementById('stop-rewrite-btn');
+                const toggleDiffBtn = document.getElementById('toggle-diff-btn');
+                
+                // Input events
+                originalText.addEventListener('input', () => {
+                    this.updateCharCount();
+                    this.updateRewriteButton();
+                    this.updateOriginalDisplay();
+                });
+                
+                // Button events
+                rewriteBtn.addEventListener('click', () => this.rewriteText());
+                clearTextBtn.addEventListener('click', () => this.clearAll());
+                copyRewrittenBtn.addEventListener('click', () => this.copyRewritten());
+                exportComparisonBtn.addEventListener('click', () => this.exportComparison());
+                regenerateBtn.addEventListener('click', () => this.regenerateRewrite());
+                stopRewriteBtn.addEventListener('click', () => this.stopRewrite());
+                toggleDiffBtn.addEventListener('click', () => this.toggleDiff());
+                
+                // Settings events
+                document.getElementById('tone-select').addEventListener('change', (e) => {
+                    document.getElementById('current-tone').textContent = 
+                        e.target.options[e.target.selectedIndex].text;
+                });
+                
+                // Sample template events
+                document.querySelectorAll('.sample-template').forEach(template => {
+                    template.addEventListener('click', () => {
+                        const text = template.getAttribute('data-text');
+                        const context = template.getAttribute('data-context');
+                        
+                        originalText.value = text;
+                        document.getElementById('shared-context').value = context;
+                        
+                        this.updateCharCount();
+                        this.updateRewriteButton();
+                        this.updateOriginalDisplay();
+                    });
+                });
+            }
+            
+            updateCharCount() {
+                const originalText = document.getElementById('original-text');
+                const charCount = document.getElementById('original-char-count');
+                const wordCount = document.getElementById('original-word-count');
+                
+                const text = originalText.value;
+                const chars = text.length;
+                const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+                
+                charCount.textContent = chars;
+                wordCount.textContent = words;
+            }
+            
+            updateOriginalDisplay() {
+                const originalText = document.getElementById('original-text').value;
+                const originalDisplay = document.getElementById('original-display');
+                const originalWordsDisplay = document.getElementById('original-display-words');
+                
+                if (originalText.trim()) {
+                    originalDisplay.textContent = originalText;
+                    const words = originalText.trim().split(/\s+/).length;
+                    originalWordsDisplay.textContent = words;
+                } else {
+                    originalDisplay.innerHTML = `
+                        <div class="text-gray-500 flex items-center justify-center h-full">
+                            <div class="text-center">
+                                <i class="fas fa-file-text text-4xl mb-4 opacity-50"></i>
+                                <p>Original text will appear here...</p>
+                            </div>
+                        </div>
+                    `;
+                    originalWordsDisplay.textContent = '0';
+                }
+            }
+            
+            updateRewriteButton() {
+                const originalText = document.getElementById('original-text');
+                const rewriteBtn = document.getElementById('rewrite-btn');
+                
+                const hasText = originalText.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                
+                rewriteBtn.disabled = !(hasText && apiAvailable && !this.isRewriting);
+            }
+            
+            async createRewriter() {
+                const tone = document.getElementById('tone-select').value;
+                const length = document.getElementById('length-select').value;
+                const format = document.getElementById('format-select').value;
+                const sharedContext = document.getElementById('shared-context').value.trim();
+                
+                const options = {
+                    tone: tone,
+                    length: length,
+                    format: format,
+                    monitor(m) {
+                        m.addEventListener('downloadprogress', (e) => {
+                            console.log(`Downloaded ${e.loaded * 100}%`);
+                        });
+                    }
+                };
+                
+                if (sharedContext) {
+                    options.sharedContext = sharedContext;
+                }
+                
+                return await Rewriter.create(options);
+            }
+            
+            async rewriteText() {
+                if (this.isRewriting) return;
+                
+                const originalText = document.getElementById('original-text').value.trim();
+                if (!originalText) return;
+                
+                this.isRewriting = true;
+                this.currentController = new AbortController();
+                this.originalText = originalText;
+                
+                try {
+                    // Create rewriter with current settings
+                    this.rewriter = await this.createRewriter();
+                    
+                    // Prepare UI
+                    this.prepareRewriteOutput();
+                    
+                    const mode = document.getElementById('mode-select').value;
+                    const additionalContext = document.getElementById('additional-context').value.trim();
+                    const contextObj = additionalContext ? { context: additionalContext } : {};
+                    
+                    const startTime = performance.now();
+                    
+                    if (mode === 'streaming') {
+                        await this.streamingRewrite(originalText, contextObj);
+                    } else {
+                        await this.batchRewrite(originalText, contextObj);
+                    }
+                    
+                    const endTime = performance.now();
+                    const processingTime = Math.round(endTime - startTime);
+                    
+                    this.displayRewriteInfo(processingTime);
+                    this.calculateStats();
+                    this.enableRewriteActions();
+                    
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Text rewriting failed:', error);
+                        this.showError('Text rewriting failed: ' + error.message);
+                    }
+                } finally {
+                    this.isRewriting = false;
+                    this.currentController = null;
+                    this.updateUI();
+                }
+            }
+            
+            async streamingRewrite(text, contextObj) {
+                const rewrittenDisplay = document.getElementById('rewritten-display');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                cursor.classList.remove('hidden');
+                
+                const stream = this.rewriter.rewriteStreaming(text, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                let wordCount = 0;
+                for await (const chunk of stream) {
+                    this.rewrittenText = chunk;
+                    rewrittenDisplay.textContent = chunk;
+                    
+                    // Update word count in real-time
+                    const words = chunk.trim() ? chunk.trim().split(/\s+/).length : 0;
+                    if (words !== wordCount) {
+                        wordCount = words;
+                        document.getElementById('rewritten-display-words').textContent = words;
+                    }
+                }
+                
+                cursor.classList.add('hidden');
+            }
+            
+            async batchRewrite(text, contextObj) {
+                const rewrittenDisplay = document.getElementById('rewritten-display');
+                const loading = document.getElementById('rewrite-loading');
+                
+                loading.classList.remove('hidden');
+                
+                const result = await this.rewriter.rewrite(text, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                loading.classList.add('hidden');
+                this.rewrittenText = result;
+                rewrittenDisplay.textContent = result;
+                
+                const words = result.trim() ? result.trim().split(/\s+/).length : 0;
+                document.getElementById('rewritten-display-words').textContent = words;
+            }
+            
+            prepareRewriteOutput() {
+                const rewrittenDisplay = document.getElementById('rewritten-display');
+                const placeholder = document.getElementById('rewrite-placeholder');
+                const loading = document.getElementById('rewrite-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                placeholder.style.display = 'none';
+                rewrittenDisplay.textContent = '';
+                loading.classList.add('hidden');
+                cursor.classList.add('hidden');
+                
+                this.updateUI();
+            }
+            
+            displayRewriteInfo(processingTime) {
+                const info = document.getElementById('rewrite-info');
+                const rewrittenWords = this.rewrittenText.trim() ? this.rewrittenText.trim().split(/\s+/).length : 0;
+                const rewrittenChars = this.rewrittenText.length;
+                
+                info.textContent = `${rewrittenWords} words, ${rewrittenChars} characters • Processed in ${processingTime}ms`;
+                document.getElementById('processing-time').textContent = `${processingTime}ms`;
+            }
+            
+            calculateStats() {
+                const originalLength = this.originalText.length;
+                const rewrittenLength = this.rewrittenText.length;
+                
+                const originalWords = this.originalText.trim().split(/\s+/).length;
+                const rewrittenWords = this.rewrittenText.trim() ? this.rewrittenText.trim().split(/\s+/).length : 0;
+                
+                // Simple character/word difference calculation
+                const charsDiff = Math.abs(rewrittenLength - originalLength);
+                const wordsDiff = Math.abs(rewrittenWords - originalWords);
+                
+                const lengthChange = originalLength > 0 ? 
+                    ((rewrittenLength - originalLength) / originalLength * 100).toFixed(1) : 0;
+                
+                document.getElementById('chars-changed').textContent = charsDiff;
+                document.getElementById('words-changed').textContent = wordsDiff;
+                document.getElementById('length-change').textContent = `${lengthChange}%`;
+                
+                // Update length change bar
+                const lengthChangeBar = document.getElementById('length-change-bar');
+                const changePercent = Math.min(Math.abs(lengthChange), 100);
+                lengthChangeBar.style.width = `${changePercent}%`;
+                
+                if (lengthChange < 0) {
+                    lengthChangeBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)'; // Red for shorter
+                } else if (lengthChange > 0) {
+                    lengthChangeBar.style.background = 'linear-gradient(90deg, #10b981, #059669)'; // Green for longer
+                } else {
+                    lengthChangeBar.style.background = 'linear-gradient(90deg, #06b6d4, #3b82f6)'; // Blue for same
+                }
+            }
+            
+            toggleDiff() {
+                const toggleBtn = document.getElementById('toggle-diff-btn');
+                const originalDisplay = document.getElementById('original-display');
+                const rewrittenDisplay = document.getElementById('rewritten-display');
+                
+                this.showingDiff = !this.showingDiff;
+                
+                if (this.showingDiff && this.originalText && this.rewrittenText) {
+                    const diffResult = this.generateDiff(this.originalText, this.rewrittenText);
+                    originalDisplay.innerHTML = diffResult.original;
+                    rewrittenDisplay.innerHTML = diffResult.rewritten;
+                    toggleBtn.innerHTML = '<i class="fas fa-eye-slash mr-1"></i> Hide Differences';
+                } else {
+                    originalDisplay.textContent = this.originalText;
+                    rewrittenDisplay.textContent = this.rewrittenText;
+                    toggleBtn.innerHTML = '<i class="fas fa-eye mr-1"></i> Show Differences';
+                }
+            }
+            
+            generateDiff(original, rewritten) {
+                // Simple word-based diff highlighting
+                const originalWords = original.split(/\s+/);
+                const rewrittenWords = rewritten.split(/\s+/);
+                
+                // This is a simplified diff - in a real app you'd use a proper diff algorithm
+                let originalHtml = '';
+                let rewrittenHtml = '';
+                
+                // Basic highlighting for demonstration
+                originalWords.forEach((word, index) => {
+                    if (rewrittenWords[index] && word !== rewrittenWords[index]) {
+                        originalHtml += `<span class="diff-removed">${word}</span> `;
+                    } else {
+                        originalHtml += `${word} `;
+                    }
+                });
+                
+                rewrittenWords.forEach((word, index) => {
+                    if (originalWords[index] && word !== originalWords[index]) {
+                        rewrittenHtml += `<span class="diff-added">${word}</span> `;
+                    } else {
+                        rewrittenHtml += `${word} `;
+                    }
+                });
+                
+                return {
+                    original: originalHtml.trim(),
+                    rewritten: rewrittenHtml.trim()
+                };
+            }
+            
+            enableRewriteActions() {
+                document.getElementById('copy-rewritten-btn').disabled = false;
+                document.getElementById('export-comparison-btn').disabled = false;
+                document.getElementById('regenerate-btn').disabled = false;
+            }
+            
+            stopRewrite() {
+                if (this.currentController) {
+                    this.currentController.abort();
+                }
+            }
+            
+            regenerateRewrite() {
+                this.rewriteText();
+            }
+            
+            clearAll() {
+                document.getElementById('original-text').value = '';
+                document.getElementById('additional-context').value = '';
+                document.getElementById('rewritten-display').textContent = '';
+                document.getElementById('rewrite-placeholder').style.display = 'flex';
+                document.getElementById('rewrite-info').textContent = '';
+                document.getElementById('copy-rewritten-btn').disabled = true;
+                document.getElementById('export-comparison-btn').disabled = true;
+                document.getElementById('regenerate-btn').disabled = true;
+                
+                this.originalText = '';
+                this.rewrittenText = '';
+                
+                this.updateCharCount();
+                this.updateOriginalDisplay();
+                this.updateRewriteButton();
+                
+                // Reset stats
+                document.getElementById('chars-changed').textContent = '0';
+                document.getElementById('words-changed').textContent = '0';
+                document.getElementById('length-change').textContent = '0%';
+                document.getElementById('processing-time').textContent = '-';
+                document.getElementById('length-change-bar').style.width = '0%';
+            }
+            
+            async copyRewritten() {
+                try {
+                    await navigator.clipboard.writeText(this.rewrittenText);
+                    this.showNotification('Rewritten text copied to clipboard', 'success');
+                } catch (error) {
+                    console.error('Failed to copy rewritten text:', error);
+                    this.showNotification('Failed to copy text', 'error');
+                }
+            }
+            
+            exportComparison() {
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                const tone = document.getElementById('tone-select').value;
+                
+                const content = `ORIGINAL TEXT:
+${this.originalText}
+
+REWRITTEN TEXT (${tone}):
+${this.rewrittenText}
+
+Generated on: ${new Date().toLocaleString()}`;
+                
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `text-comparison-${tone}-${timestamp}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Comparison exported successfully', 'success');
+            }
+            
+            updateUI() {
+                const rewriteBtn = document.getElementById('rewrite-btn');
+                const rewriteBtnText = document.getElementById('rewrite-btn-text');
+                const stopRewriteBtn = document.getElementById('stop-rewrite-btn');
+                
+                if (this.isRewriting) {
+                    rewriteBtnText.textContent = 'Rewriting...';
+                    rewriteBtn.classList.add('hidden');
+                    stopRewriteBtn.classList.remove('hidden');
+                } else {
+                    rewriteBtnText.textContent = 'Rewrite Text';
+                    rewriteBtn.classList.remove('hidden');
+                    stopRewriteBtn.classList.add('hidden');
+                }
+                
+                this.updateRewriteButton();
+            }
+            
+            showError(message) {
+                const rewrittenDisplay = document.getElementById('rewritten-display');
+                const loading = document.getElementById('rewrite-loading');
+                const cursor = document.getElementById('streaming-cursor');
+                
+                loading.classList.add('hidden');
+                cursor.classList.add('hidden');
+                rewrittenDisplay.innerHTML = `<div class="text-red-300"><i class="fas fa-exclamation-triangle mr-2"></i>${message}</div>`;
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new RewriterApp();
+        });
+    </script>
+</body>
+</html>

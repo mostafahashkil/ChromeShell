@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebShield Extension Test</title>
+    
+    <!-- Aggressive Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none';">
+    
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .blocked { background: #ffebee; color: #c62828; }
+        .allowed { background: #e8f5e8; color: #2e7d2e; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🛡️ WebShield Extension Detection Test</h1>
+        
+        <div id="extension-status">
+            <h3>Extension Detection Results:</h3>
+            <div id="detection-results">Scanning...</div>
+        </div>
+        
+        <div id="dom-monitor">
+            <h3>DOM Changes Monitor:</h3>
+            <div id="dom-changes"></div>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <button onclick="scanForExtensions()">🔍 Scan for Extensions</button>
+            <button onclick="testElementCreation()">🧪 Test Element Creation</button>
+            <button onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+    </div>
+
+    <!-- WebShield Security Module -->
+    <script src="security.js"></script>
+
+    <script>
+        let changeCount = 0;
+        let detectedExtensions = [];
+
+        // Monitor DOM changes
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            changeCount++;
+                            logDOMChange('Added', node);
+                            analyzeNode(node);
+                        }
+                    });
+                }
+            });
+        });
+
+        observer.observe(document, {
+            childList: true,
+            subtree: true,
+            attributes: true
+        });
+
+        function logDOMChange(action, node) {
+            const domChanges = document.getElementById('dom-changes');
+            const change = document.createElement('div');
+            change.className = 'status';
+            
+            const isExtension = analyzeNode(node);
+            change.className += isExtension ? ' blocked' : ' allowed';
+            
+            change.innerHTML = `
+                <strong>${action}:</strong> ${node.tagName || node.nodeName} 
+                ${node.className ? `class="${node.className}"` : ''}
+                ${node.id ? `id="${node.id}"` : ''}
+                ${isExtension ? '<strong> [EXTENSION DETECTED]</strong>' : ''}
+            `;
+            
+            domChanges.appendChild(change);
+            
+            // Keep only last 20 changes
+            while (domChanges.children.length > 20) {
+                domChanges.removeChild(domChanges.firstChild);
+            }
+        }
+
+        function analyzeNode(node) {
+            if (!node.tagName) return false;
+            
+            const extensionPatterns = [
+                /extension/i,
+                /chrome-/i,
+                /addon/i,
+                /plugin/i,
+                /sidebar/i,
+                /popup/i,
+                /overlay/i
+            ];
+            
+            const nodeText = (node.className + ' ' + node.id + ' ' + node.tagName).toLowerCase();
+            
+            for (let pattern of extensionPatterns) {
+                if (pattern.test(nodeText)) {
+                    detectedExtensions.push({
+                        element: node.tagName,
+                        className: node.className,
+                        id: node.id,
+                        pattern: pattern.toString()
+                    });
+                    return true;
+                }
+            }
+            
+            // Check for extension URLs
+            if (node.src && (node.src.includes('chrome-extension://') || 
+                            node.src.includes('moz-extension://') ||
+                            node.src.includes('extension://'))) {
+                detectedExtensions.push({
+                    element: node.tagName,
+                    src: node.src,
+                    pattern: 'Extension URL'
+                });
+                return true;
+            }
+            
+            return false;
+        }
+
+        function scanForExtensions() {
+            const results = document.getElementById('detection-results');
+            results.innerHTML = '';
+            
+            // Scan all elements
+            const allElements = document.querySelectorAll('*');
+            let extensionCount = 0;
+            
+            allElements.forEach(element => {
+                if (analyzeNode(element)) {
+                    extensionCount++;
+                }
+            });
+            
+            // Check for extension APIs
+            const extensionAPIs = [];
+            if (window.chrome && window.chrome.runtime) {
+                extensionAPIs.push('chrome.runtime');
+            }
+            if (window.browser && window.browser.runtime) {
+                extensionAPIs.push('browser.runtime');
+            }
+            
+            // Display results
+            results.innerHTML = `
+                <div class="status ${extensionCount > 0 ? 'blocked' : 'allowed'}">
+                    <strong>Extension Elements Found:</strong> ${extensionCount}
+                </div>
+                <div class="status ${extensionAPIs.length > 0 ? 'blocked' : 'allowed'}">
+                    <strong>Extension APIs Detected:</strong> ${extensionAPIs.join(', ') || 'None'}
+                </div>
+                <div class="status">
+                    <strong>Total DOM Changes:</strong> ${changeCount}
+                </div>
+                <div class="status">
+                    <strong>WebShield Active:</strong> ${window.webshieldSecurity ? '✅ Yes' : '❌ No'}
+                </div>
+            `;
+            
+            if (detectedExtensions.length > 0) {
+                results.innerHTML += '<h4>Detected Extensions:</h4>';
+                detectedExtensions.forEach((ext, index) => {
+                    results.innerHTML += `<div class="status blocked">Extension ${index + 1}: ${JSON.stringify(ext)}</div>`;
+                });
+            }
+        }
+
+        function testElementCreation() {
+            // Test creating suspicious elements
+            const testElements = [
+                { tag: 'div', className: 'chrome-extension-sidebar' },
+                { tag: 'iframe', className: 'extension-popup' },
+                { tag: 'div', id: 'addon-menu' },
+                { tag: 'script', src: 'chrome-extension://fake/script.js' }
+            ];
+            
+            testElements.forEach((test, index) => {
+                setTimeout(() => {
+                    const element = document.createElement(test.tag);
+                    if (test.className) element.className = test.className;
+                    if (test.id) element.id = test.id;
+                    if (test.src) element.src = test.src;
+                    
+                    element.textContent = `Test Element ${index + 1}`;
+                    document.body.appendChild(element);
+                }, index * 200);
+            });
+        }
+
+        function clearResults() {
+            document.getElementById('detection-results').innerHTML = 'Cleared.';
+            document.getElementById('dom-changes').innerHTML = 'Cleared.';
+            changeCount = 0;
+            detectedExtensions = [];
+        }
+
+        // Auto-scan on load
+        setTimeout(scanForExtensions, 1000);
+        
+        // Periodic scan
+        setInterval(scanForExtensions, 5000);
+    </script>
+</body>
+</html>

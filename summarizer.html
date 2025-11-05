@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Summarizer API - Chrome AI Shell</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #475569, #64748b, #475569);
+            --bg-glass: rgba(15, 23, 42, 0.8);
+            --border-glass: rgba(71, 85, 105, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #e2e8f0;
+        }
+
+        .gradient-bg {
+            background: var(--bg-primary);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+        }
+
+        .glass-morphism {
+            background: var(--bg-glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border-glass);
+        }
+
+        @keyframes gradient {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-ready { background-color: #10b981; }
+        .status-loading { background-color: #f59e0b; animation: pulse 2s infinite; }
+        .status-unavailable { background-color: #ef4444; }
+
+        .summary-box {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        .input-box {
+            min-height: 300px;
+            resize: vertical;
+        }
+
+        .summary-type-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .summary-type-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .summary-type-card.selected {
+            border: 2px solid #10b981;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .stream-output {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .sample-content {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sample-content:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: linear-gradient(to right, #f97316, #ea580c);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+    <!-- Header -->
+    <header class="glass-morphism shadow-lg">
+        <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <button onclick="window.history.back()" class="glass-morphism rounded-lg p-2 hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 rounded-xl flex items-center justify-center shadow-lg">
+                        <i class="fas fa-compress-alt text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold text-white">Summarizer API</h1>
+                        <p class="text-sm text-gray-200">Chrome Built-in AI Text Summarization Service</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center glass-morphism rounded-lg px-3 py-2">
+                        <span id="api-status" class="status-indicator status-loading"></span>
+                        <span id="status-text" class="text-sm">Checking...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="w-full py-8">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            
+            <!-- API Status Alert -->
+            <div id="status-alert" class="hidden mb-6 glass-morphism rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-300 mr-3"></i>
+                    <div>
+                        <h3 class="font-semibold text-white">API Not Available</h3>
+                        <p class="text-gray-200 text-sm" id="status-message">The Summarizer API is not available in this browser.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Type Selection -->
+            <div class="glass-morphism rounded-2xl p-6 mb-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                    <i class="fas fa-list text-orange-300 mr-3"></i>
+                    Summary Type
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="summary-type-card glass-morphism rounded-lg p-4 selected" data-type="key-points">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-bullet-list text-orange-300 mr-3"></i>
+                            <span class="font-semibold text-white">Key Points</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Extract main points as bullet list</p>
+                    </div>
+
+                    <div class="summary-type-card glass-morphism rounded-lg p-4" data-type="tldr">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-compress text-orange-300 mr-3"></i>
+                            <span class="font-semibold text-white">TL;DR</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Short and concise summary</p>
+                    </div>
+
+                    <div class="summary-type-card glass-morphism rounded-lg p-4" data-type="teaser">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-eye text-orange-300 mr-3"></i>
+                            <span class="font-semibold text-white">Teaser</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Engaging preview summary</p>
+                    </div>
+
+                    <div class="summary-type-card glass-morphism rounded-lg p-4" data-type="headline">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-heading text-orange-300 mr-3"></i>
+                            <span class="font-semibold text-white">Headline</span>
+                        </div>
+                        <p class="text-sm text-gray-300">Single sentence headline</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Settings -->
+            <div class="glass-morphism rounded-2xl p-6 mb-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                    <i class="fas fa-cog text-orange-300 mr-3"></i>
+                    Settings
+                </h3>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">Length</label>
+                        <select id="length-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                            <option value="short">Short</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="long">Long</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">Format</label>
+                        <select id="format-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                            <option value="markdown" selected>Markdown</option>
+                            <option value="plain-text">Plain Text</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-200 mb-2">Mode</label>
+                        <select id="mode-select" class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white">
+                            <option value="batch">Batch (Complete)</option>
+                            <option value="streaming" selected>Streaming (Real-time)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-200 mb-2">Context (Optional)</label>
+                    <input type="text" id="context-input" 
+                           class="w-full p-3 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                           placeholder="Add context to improve summarization (e.g., 'This is a technical article for developers')">
+                </div>
+            </div>
+
+            <!-- Main Interface -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                
+                <!-- Input Section -->
+                <div class="space-y-4">
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <h3 class="text-lg font-semibold text-white mb-4 flex items-center">
+                            <i class="fas fa-file-alt text-orange-300 mr-3"></i>
+                            Text Input
+                        </h3>
+                        
+                        <textarea 
+                            id="input-text" 
+                            class="input-box w-full p-4 bg-gray-800 bg-opacity-50 border border-gray-600 rounded-lg text-white placeholder-gray-400"
+                            placeholder="Paste or type the text you want to summarize..."
+                            rows="12"
+                        ></textarea>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400">
+                                <span id="char-count">0</span> characters • <span id="word-count">0</span> words
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="clear-btn" class="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors">
+                                    <i class="fas fa-trash mr-1"></i> Clear
+                                </button>
+                                <button id="paste-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors">
+                                    <i class="fas fa-paste mr-1"></i> Paste
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-center mt-6">
+                            <button id="summarize-btn" class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-8 py-3 rounded-lg hover:shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                <i class="fas fa-magic mr-2"></i>
+                                <span id="summarize-btn-text">Summarize</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Output Section -->
+                <div class="space-y-4">
+                    <div class="glass-morphism rounded-2xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg font-semibold text-white flex items-center">
+                                <i class="fas fa-compress-arrows-alt text-red-300 mr-3"></i>
+                                Summary
+                            </h3>
+                            <div id="progress-container" class="hidden">
+                                <div class="w-32 h-1 bg-gray-700 rounded-full">
+                                    <div id="progress-bar" class="progress-bar w-0"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="summary-box relative bg-gray-900 bg-opacity-50 border border-gray-600 rounded-lg p-4 min-h-[300px]">
+                            <div id="summary-output" class="stream-output text-white"></div>
+                            <div id="summary-placeholder" class="text-gray-500 flex items-center justify-center h-full">
+                                <div class="text-center">
+                                    <i class="fas fa-magic text-4xl mb-4 opacity-50"></i>
+                                    <p>Summary will appear here...</p>
+                                </div>
+                            </div>
+                            <div id="loading-indicator" class="hidden absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 rounded-lg">
+                                <div class="flex items-center space-x-2">
+                                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-300"></div>
+                                    <span class="text-orange-300">Summarizing...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between mt-4">
+                            <div class="text-xs text-gray-400" id="summary-info">
+                            </div>
+                            <div class="flex space-x-2">
+                                <button id="copy-summary-btn" class="px-4 py-2 text-sm text-green-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-copy mr-1"></i> Copy
+                                </button>
+                                <button id="export-btn" class="px-4 py-2 text-sm text-blue-300 hover:text-white transition-colors disabled:opacity-50" disabled>
+                                    <i class="fas fa-download mr-1"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sample Content -->
+            <div class="glass-morphism rounded-2xl p-6 mb-6">
+                <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                    <i class="fas fa-file-text text-purple-300 mr-3"></i>
+                    Sample Content
+                </h3>
+                <p class="text-gray-200 text-sm mb-4">Click on any sample to test the summarization:</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="sample-content glass-morphism rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-orange-300">News Article</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200 mb-2">Technology breakthrough in renewable energy...</p>
+                        <div class="hidden full-content">
+                            Scientists at MIT have achieved a major breakthrough in renewable energy technology by developing a new type of solar panel that is 40% more efficient than traditional photovoltaic cells. The innovation comes from a novel approach that combines perovskite materials with silicon in a tandem cell structure, allowing the panels to capture a broader spectrum of sunlight. This development could significantly reduce the cost of solar energy and accelerate the adoption of renewable power sources worldwide. The research team, led by Dr. Sarah Johnson, spent five years developing this technology, overcoming numerous technical challenges including material stability and manufacturing scalability. Initial testing shows that these panels maintain their efficiency even after 1,000 hours of continuous operation under extreme weather conditions. The technology is expected to be commercially available within the next three years, potentially revolutionizing the solar energy industry and bringing us closer to achieving global carbon neutrality goals.
+                        </div>
+                    </div>
+
+                    <div class="sample-content glass-morphism rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-orange-300">Research Paper</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200 mb-2">Machine learning applications in healthcare...</p>
+                        <div class="hidden full-content">
+                            This comprehensive study examines the applications of machine learning in healthcare diagnostics, analyzing data from over 10,000 medical cases across multiple hospitals. Our research demonstrates that AI-powered diagnostic tools can improve accuracy by up to 25% compared to traditional methods, particularly in radiology and pathology. The study utilized deep learning algorithms trained on anonymized patient data, focusing on early detection of cardiovascular diseases, cancer, and neurological disorders. Key findings include the identification of previously unknown biomarkers that could lead to earlier interventions and improved patient outcomes. The methodology involved collaboration between computer scientists, medical professionals, and biostatisticians to ensure clinical relevance and statistical validity. Challenges identified include data privacy concerns, the need for larger diverse datasets, and the importance of maintaining human oversight in medical decision-making. The paper concludes with recommendations for implementing AI diagnostic tools in clinical practice while maintaining ethical standards and patient safety as primary concerns.
+                        </div>
+                    </div>
+
+                    <div class="sample-content glass-morphism rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-orange-300">Business Report</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200 mb-2">Q3 financial performance and market analysis...</p>
+                        <div class="hidden full-content">
+                            TechCorp Inc. reported strong Q3 financial results with revenue of $2.4 billion, representing a 15% increase year-over-year. The company's cloud services division was the primary growth driver, contributing $800 million in revenue and showing 35% growth compared to the same period last year. Profit margins improved to 22%, up from 18% in Q2, due to operational efficiencies and strategic cost management initiatives. The company expanded its global workforce by 12%, adding key talent in artificial intelligence and cybersecurity sectors. Market expansion into Asia-Pacific regions exceeded expectations, with new client acquisitions up 40%. However, the company faces challenges from increased competition and supply chain disruptions affecting hardware divisions. CEO Maria Rodriguez emphasized the company's commitment to innovation and sustainable growth, announcing plans for a new $500 million R&D facility. Looking ahead to Q4, the company projects continued growth with revenue targets of $2.8 billion, supported by new product launches and strategic partnerships in emerging markets.
+                        </div>
+                    </div>
+
+                    <div class="sample-content glass-morphism rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-semibold text-orange-300">Product Review</span>
+                            <i class="fas fa-copy text-xs text-gray-400"></i>
+                        </div>
+                        <p class="text-sm text-gray-200 mb-2">Comprehensive smartphone evaluation...</p>
+                        <div class="hidden full-content">
+                            After three weeks of extensive testing, the new PhoneX Pro demonstrates significant improvements over its predecessor. The 6.7-inch OLED display delivers exceptional brightness and color accuracy, making it ideal for both professional photography and media consumption. Battery life has been substantially enhanced, easily lasting a full day of heavy usage including gaming, video streaming, and productivity tasks. The triple-camera system excels in various lighting conditions, with the new night mode producing remarkably clear low-light photos. Processing power from the latest A16 chip handles demanding applications effortlessly, with no noticeable lag during multitasking. Build quality feels premium with the titanium frame and improved water resistance rating. However, the device is notably heavy at 240 grams, and the premium price point of $1,299 may deter budget-conscious consumers. The new features like enhanced Face ID and improved wireless charging are welcome additions. Overall, while expensive, the PhoneX Pro offers cutting-edge technology and performance that justifies its position in the flagship smartphone market.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Features -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Features -->
+                <div class="glass-morphism rounded-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-star text-yellow-300 mr-3"></i>
+                        Features
+                    </h3>
+                    <ul class="space-y-3 text-gray-200">
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Multiple summary types (TL;DR, Key Points, Teaser, Headline)
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Adjustable summary length
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Real-time streaming output
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Context-aware summarization
+                        </li>
+                        <li class="flex items-center">
+                            <i class="fas fa-check-circle text-green-300 mr-3"></i>
+                            Privacy-first (local processing)
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Tips -->
+                <div class="glass-morphism rounded-xl p-6">
+                    <h3 class="text-xl font-bold text-white mb-4 flex items-center">
+                        <i class="fas fa-lightbulb text-blue-300 mr-3"></i>
+                        Usage Tips
+                    </h3>
+                    <ul class="space-y-3 text-gray-200 text-sm">
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-orange-300 mr-2 mt-1"></i>
+                            <span>Longer texts generally produce better summaries</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-orange-300 mr-2 mt-1"></i>
+                            <span>Add context to improve relevance for your audience</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-orange-300 mr-2 mt-1"></i>
+                            <span>Try different summary types for various use cases</span>
+                        </li>
+                        <li class="flex items-start">
+                            <i class="fas fa-arrow-right text-orange-300 mr-2 mt-1"></i>
+                            <span>Use streaming mode for real-time feedback</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        class SummarizerApp {
+            constructor() {
+                this.summarizer = null;
+                this.isSummarizing = false;
+                this.currentType = 'key-points';
+                this.currentController = null;
+                
+                this.init();
+            }
+            
+            async init() {
+                await this.checkAPIAvailability();
+                this.setupEventListeners();
+                this.updateUI();
+            }
+            
+            async checkAPIAvailability() {
+                const statusIndicator = document.getElementById('api-status');
+                const statusText = document.getElementById('status-text');
+                const statusAlert = document.getElementById('status-alert');
+                const statusMessage = document.getElementById('status-message');
+                
+                try {
+                    if (!('Summarizer' in self)) {
+                        throw new Error('Summarizer API not supported');
+                    }
+                    
+                    const availability = await Summarizer.availability();
+                    
+                    if (availability === 'unavailable') {
+                        statusIndicator.className = 'status-indicator status-unavailable';
+                        statusText.textContent = 'Unavailable';
+                        statusAlert.classList.remove('hidden');
+                        statusMessage.textContent = 'The Summarizer API is not available. Please ensure you\'re using Chrome 138+ with built-in AI APIs enabled.';
+                        return;
+                    }
+                    
+                    statusIndicator.className = 'status-indicator status-ready';
+                    statusText.textContent = 'Ready';
+                    
+                } catch (error) {
+                    console.error('Summarizer API availability check failed:', error);
+                    statusIndicator.className = 'status-indicator status-unavailable';
+                    statusText.textContent = 'Unavailable';
+                    statusAlert.classList.remove('hidden');
+                    statusMessage.textContent = 'Summarizer API is not available in this browser. Please use Chrome 138+ with built-in AI features enabled.';
+                }
+            }
+            
+            setupEventListeners() {
+                const inputText = document.getElementById('input-text');
+                const summarizeBtn = document.getElementById('summarize-btn');
+                const clearBtn = document.getElementById('clear-btn');
+                const pasteBtn = document.getElementById('paste-btn');
+                const copySummaryBtn = document.getElementById('copy-summary-btn');
+                const exportBtn = document.getElementById('export-btn');
+                
+                // Text input events
+                inputText.addEventListener('input', () => {
+                    this.updateCounts();
+                    this.updateSummarizeButton();
+                });
+                
+                // Button events
+                summarizeBtn.addEventListener('click', () => this.summarize());
+                clearBtn.addEventListener('click', () => this.clearAll());
+                pasteBtn.addEventListener('click', () => this.pasteText());
+                copySummaryBtn.addEventListener('click', () => this.copySummary());
+                exportBtn.addEventListener('click', () => this.exportSummary());
+                
+                // Summary type selection
+                document.querySelectorAll('.summary-type-card').forEach(card => {
+                    card.addEventListener('click', () => {
+                        document.querySelectorAll('.summary-type-card').forEach(c => c.classList.remove('selected'));
+                        card.classList.add('selected');
+                        this.currentType = card.getAttribute('data-type');
+                    });
+                });
+                
+                // Sample content events
+                document.querySelectorAll('.sample-content').forEach(sample => {
+                    sample.addEventListener('click', () => {
+                        const fullContent = sample.querySelector('.full-content').textContent;
+                        inputText.value = fullContent;
+                        this.updateCounts();
+                        this.updateSummarizeButton();
+                    });
+                });
+            }
+            
+            updateCounts() {
+                const inputText = document.getElementById('input-text');
+                const charCount = document.getElementById('char-count');
+                const wordCount = document.getElementById('word-count');
+                
+                const text = inputText.value;
+                const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+                
+                charCount.textContent = text.length;
+                wordCount.textContent = words;
+            }
+            
+            updateSummarizeButton() {
+                const inputText = document.getElementById('input-text');
+                const summarizeBtn = document.getElementById('summarize-btn');
+                
+                const hasText = inputText.value.trim().length > 0;
+                const apiAvailable = document.getElementById('api-status').classList.contains('status-ready');
+                
+                summarizeBtn.disabled = !(hasText && apiAvailable && !this.isSummarizing);
+            }
+            
+            async createSummarizer() {
+                const length = document.getElementById('length-select').value;
+                const format = document.getElementById('format-select').value;
+                const context = document.getElementById('context-input').value.trim();
+                
+                const options = {
+                    type: this.currentType,
+                    format: format,
+                    length: length,
+                    monitor(m) {
+                        m.addEventListener('downloadprogress', (e) => {
+                            console.log(`Downloaded ${e.loaded * 100}%`);
+                        });
+                    }
+                };
+                
+                if (context) {
+                    options.sharedContext = context;
+                }
+                
+                return await Summarizer.create(options);
+            }
+            
+            async summarize() {
+                if (this.isSummarizing) return;
+                
+                const inputText = document.getElementById('input-text').value.trim();
+                if (!inputText) return;
+                
+                this.isSummarizing = true;
+                this.currentController = new AbortController();
+                
+                try {
+                    // Create summarizer with current settings
+                    this.summarizer = await this.createSummarizer();
+                    
+                    // Prepare UI
+                    this.prepareOutput();
+                    
+                    const mode = document.getElementById('mode-select').value;
+                    const context = document.getElementById('context-input').value.trim();
+                    const contextObj = context ? { context: context } : {};
+                    
+                    const startTime = performance.now();
+                    
+                    if (mode === 'streaming') {
+                        await this.streamingSummarize(inputText, contextObj);
+                    } else {
+                        await this.batchSummarize(inputText, contextObj);
+                    }
+                    
+                    const endTime = performance.now();
+                    const processingTime = Math.round(endTime - startTime);
+                    
+                    this.displaySummaryInfo(processingTime);
+                    this.enableSummaryActions();
+                    
+                } catch (error) {
+                    console.error('Summarization failed:', error);
+                    this.showError('Summarization failed: ' + error.message);
+                } finally {
+                    this.isSummarizing = false;
+                    this.currentController = null;
+                    this.updateUI();
+                }
+            }
+            
+            async streamingSummarize(text, contextObj) {
+                const output = document.getElementById('summary-output');
+                const progressContainer = document.getElementById('progress-container');
+                const progressBar = document.getElementById('progress-bar');
+                
+                progressContainer.classList.remove('hidden');
+                
+                const stream = this.summarizer.summarizeStreaming(text, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                let progress = 0;
+                for await (const chunk of stream) {
+                    output.textContent += chunk;
+                    
+                    // Simulate progress (this is approximate since we don't have real progress info)
+                    progress = Math.min(progress + 10, 90);
+                    progressBar.style.width = progress + '%';
+                }
+                
+                progressBar.style.width = '100%';
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                }, 1000);
+            }
+            
+            async batchSummarize(text, contextObj) {
+                const output = document.getElementById('summary-output');
+                const loading = document.getElementById('loading-indicator');
+                
+                loading.classList.remove('hidden');
+                
+                const result = await this.summarizer.summarize(text, {
+                    ...contextObj,
+                    signal: this.currentController.signal
+                });
+                
+                loading.classList.add('hidden');
+                output.textContent += result;
+            }
+            
+            prepareOutput() {
+                const output = document.getElementById('summary-output');
+                const placeholder = document.getElementById('summary-placeholder');
+                const loading = document.getElementById('loading-indicator');
+                
+                placeholder.style.display = 'none';
+                output.textContent = '';
+                loading.classList.add('hidden');
+                
+                this.updateUI();
+            }
+            
+            displaySummaryInfo(processingTime) {
+                const info = document.getElementById('summary-info');
+                const inputLength = document.getElementById('input-text').value.length;
+                const outputLength = document.getElementById('summary-output').textContent.length;
+                const compressionRatio = Math.round((1 - outputLength / inputLength) * 100);
+                
+                info.textContent = `${this.currentType} • ${compressionRatio}% compression • ${processingTime}ms`;
+            }
+            
+            enableSummaryActions() {
+                document.getElementById('copy-summary-btn').disabled = false;
+                document.getElementById('export-btn').disabled = false;
+            }
+            
+            clearAll() {
+                document.getElementById('input-text').value = '';
+                document.getElementById('summary-output').textContent = '';
+                document.getElementById('summary-placeholder').style.display = 'flex';
+                document.getElementById('summary-info').textContent = '';
+                document.getElementById('context-input').value = '';
+                document.getElementById('copy-summary-btn').disabled = true;
+                document.getElementById('export-btn').disabled = true;
+                document.getElementById('progress-container').classList.add('hidden');
+                
+                this.updateCounts();
+                this.updateSummarizeButton();
+            }
+            
+            async pasteText() {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const inputText = document.getElementById('input-text');
+                    inputText.value = text;
+                    this.updateCounts();
+                    this.updateSummarizeButton();
+                } catch (error) {
+                    console.error('Failed to paste text:', error);
+                    this.showNotification('Failed to paste text', 'error');
+                }
+            }
+            
+            async copySummary() {
+                const output = document.getElementById('summary-output');
+                try {
+                    await navigator.clipboard.writeText(output.textContent);
+                    this.showNotification('Summary copied to clipboard', 'success');
+                } catch (error) {
+                    console.error('Failed to copy summary:', error);
+                    this.showNotification('Failed to copy summary', 'error');
+                }
+            }
+            
+            exportSummary() {
+                const output = document.getElementById('summary-output');
+                const summary = output.textContent;
+                const type = this.currentType;
+                const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                
+                const blob = new Blob([summary], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `summary-${type}-${timestamp}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                this.showNotification('Summary exported successfully', 'success');
+            }
+            
+            updateUI() {
+                const summarizeBtn = document.getElementById('summarize-btn');
+                const summarizeBtnText = document.getElementById('summarize-btn-text');
+                
+                if (this.isSummarizing) {
+                    summarizeBtnText.textContent = 'Summarizing...';
+                } else {
+                    summarizeBtnText.textContent = 'Summarize';
+                }
+                
+                this.updateSummarizeButton();
+            }
+            
+            showError(message) {
+                const output = document.getElementById('summary-output');
+                const loading = document.getElementById('loading-indicator');
+                const progressContainer = document.getElementById('progress-container');
+                
+                loading.classList.add('hidden');
+                progressContainer.classList.add('hidden');
+                output.innerHTML = `<div class="text-red-300"><i class="fas fa-exclamation-triangle mr-2"></i>${message}</div>`;
+            }
+            
+            showNotification(message, type = 'info') {
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+                
+                const bgColor = type === 'success' ? 'bg-green-500' : 
+                               type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+                
+                notification.className += ` ${bgColor} text-white`;
+                notification.innerHTML = `
+                    <div class="flex items-center">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        <span>${message}</span>
+                    </div>
+                `;
+
+                document.body.appendChild(notification);
+                
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(0)';
+                }, 100);
+
+                setTimeout(() => {
+                    notification.style.transform = 'translateX(100%)';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            document.body.removeChild(notification);
+                        }
+                    }, 300);
+                }, 3000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new SummarizerApp();
+        });
+    </script>
+</body>
+</html>
