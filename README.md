@@ -1,6 +1,18 @@
 # Chrome AI Shell
 
-A modern dashboard for exploring and testing Chrome's built-in AI APIs (Gemini nano, LanguageModel, Translator, etc). No external API keys required—everything runs locally in your browser.
+Chrome AI Shell is a modern, user-friendly dashboard for exploring and testing Chrome's built-in AI APIs—including Gemini Nano, LanguageModel, Translator, and more. It provides a visual interface to check API availability, launch demo tools, and experiment with local AI features directly in your browser—no external API keys or cloud services required.
+
+**What it does:**
+- Displays real-time status of supported Chrome AI APIs
+- Lets you launch and interact with demos for translation, summarization, rewriting, proofing, and more
+- Supports light/dark themes and modular UI extensions
+- Runs 100% locally—no backend, no data leaves your browser
+
+**Technologies used:**
+- HTML5 & JavaScript (Vanilla, no frameworks)
+- Tailwind CSS (via CDN) for modern, responsive styling
+- Chrome's built-in AI APIs (browser-native, no external dependencies)
+- Static file serving (works with Python http.server, Node.js http-server, or any static host)
 
 ## Features
 - **API Status Dashboard**: See availability of all supported Chrome AI APIs at a glance.
