@@ -49,12 +49,6 @@ MIT
 
 ## Images
 
-You can add screenshots or diagrams to this section. Place your images in the `images/` folder and reference them like this:
-
-```
-![Dashboard Screenshot](images/HomePage.png)
-```
-
 Example placeholder (replace with your own image):
 
 ![Dashboard Screenshot](images/HomePage.png)
