@@ -55,9 +55,9 @@ You can add screenshots or diagrams to this section. Place your images in the `i
 ![Dashboard Screenshot](images/your-image.png)
 ```
 
-Example placeholder:
+Example placeholder (replace with your own image):
 
-![Example Placeholder](images/.gitkeep)
+![Dashboard Screenshot](images/your-image.png)
 
 ---
 
