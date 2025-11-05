@@ -49,7 +49,6 @@ MIT
 
 ## Images
 
-Example placeholder (replace with your own image):
 
 ![Dashboard Screenshot](images/HomePage.png)
 
