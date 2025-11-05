@@ -47,6 +47,18 @@ A modern dashboard for exploring and testing Chrome's built-in AI APIs (Gemini n
 ## License
 MIT
 
+## Images
+
+You can add screenshots or diagrams to this section. Place your images in the `images/` folder and reference them like this:
+
+```
+![Dashboard Screenshot](images/your-image.png)
+```
+
+Example placeholder:
+
+![Example Placeholder](images/.gitkeep)
+
 ---
 
 **Chrome AI Shell** is built for rapid prototyping and demoing Chrome's on-device AI features. Contributions welcome!
