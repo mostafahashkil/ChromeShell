@@ -52,12 +52,12 @@ MIT
 You can add screenshots or diagrams to this section. Place your images in the `images/` folder and reference them like this:
 
 ```
-![Dashboard Screenshot](images/your-image.png)
+![Dashboard Screenshot](images/Home Page.png)
 ```
 
 Example placeholder (replace with your own image):
 
-![Dashboard Screenshot](images/your-image.png)
+![Dashboard Screenshot](images/Home page.png)
 
 ---
 
